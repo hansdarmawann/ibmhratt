@@ -1,0 +1,159 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    name: Validate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      MPLBACKEND: Agg
+      PYTHONUTF8: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-explain.txt
+            requirements-lock.txt
+      - name: Install constrained dependencies
+        run: python -m pip install -r requirements-explain.txt -c requirements-lock.txt
+      - name: Check dependency compatibility
+        run: python -m pip check
+      - name: Run unit and integration tests
+        run: python -m pytest -q --junitxml=reports/test-results.xml
+      - name: Train from the canonical raw dataset
+        run: python -m src.models.train --with-shap
+      - name: Execute all notebooks
+        run: python -m scripts.execute_notebooks
+      - name: Verify artifacts and live services
+        run: python -m scripts.verify_delivery
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-${{ matrix.os }}
+          retention-days: 14
+          if-no-files-found: warn
+          include-hidden-files: false
+          path: |
+            reports/
+            models/*.joblib
+            models/*.json
+            data/processed/*.csv
+            notebooks/*.ipynb
+
+  container:
+    name: Test container and deliver to GHCR
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - name: Set image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+            type=sha,format=long,prefix=sha-
+      - name: Build the image for local validation
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: attrition-ci:local
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Test container health and prediction
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker logs attrition-ci; docker rm -f attrition-ci' EXIT
+          docker run --detach --name attrition-ci --publish 127.0.0.1:8000:8000 attrition-ci:local
+          python - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+
+          base = "http://127.0.0.1:8000"
+          for attempt in range(60):
+              try:
+                  with urllib.request.urlopen(base + "/health", timeout=2) as response:
+                      assert json.load(response) == {"status": "ok", "model_available": True}
+                  break
+              except (urllib.error.URLError, OSError):
+                  time.sleep(1)
+          else:
+              raise SystemExit("Container failed to become healthy")
+          with open("examples/employee.json", encoding="utf-8") as source:
+              payload = json.load(source)
+          request = urllib.request.Request(
+              base + "/predict", data=json.dumps(payload).encode(),
+              headers={"Content-Type": "application/json"}, method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=10) as response:
+              result = json.load(response)
+          assert 0 <= result["attrition_probability"] <= 1
+          assert 0 <= result["threshold"] <= 1
+          expected = "Yes" if result["attrition_probability"] >= result["threshold"] else "No"
+          assert result["prediction"] == expected
+          print("Container /health and /predict verified")
+          PY
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.event.repository.fork == false
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the tested image
+        if: github.event_name == 'push' && github.event.repository.fork == false
+        shell: bash
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              docker tag attrition-ci:local "$tag"
+              docker push "$tag"
+            fi
+          done <<< "$IMAGE_TAGS"
