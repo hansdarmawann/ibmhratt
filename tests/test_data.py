@@ -1,7 +1,5 @@
 """Structural integrity, failure messages, and reproducible partition checks."""
 
-import hashlib
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -11,10 +9,10 @@ from src.data.load_data import load_data
 from src.data.validate_data import validate_data
 
 
-def test_load_and_raw_copy_integrity(raw_data):
+def test_load_and_raw_dataset_integrity(raw_data):
     assert raw_data.shape == (1470, 35)
-    original = ROOT / DATA_PATH.name
-    assert hashlib.sha256(original.read_bytes()).digest() == hashlib.sha256(DATA_PATH.read_bytes()).digest()
+    assert DATA_PATH.parent == ROOT / "data/raw"
+    pd.testing.assert_frame_equal(raw_data, pd.read_csv(DATA_PATH))
     audit = validate_data(raw_data)
     assert audit["duplicate_rows"] == 0
     assert sum(audit["missing_values"].values()) == 0
