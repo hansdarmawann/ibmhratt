@@ -1,0 +1,6 @@
+{
+  "EmployeeNumber": "Unique employee identifier; no portable predictive meaning.",
+  "EmployeeCount": "Confirmed constant in training data (1); no variation.",
+  "Over18": "Confirmed constant in training data ('Y'); no variation.",
+  "StandardHours": "Confirmed constant in training data (80); no variation."
+}

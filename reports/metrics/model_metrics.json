@@ -1,0 +1,389 @@
+{
+  "schema_version": 1,
+  "selected_model": "logistic_regression",
+  "decision_threshold": 0.2,
+  "feature_columns": [
+    "Age",
+    "DailyRate",
+    "DistanceFromHome",
+    "Education",
+    "EnvironmentSatisfaction",
+    "HourlyRate",
+    "JobInvolvement",
+    "JobLevel",
+    "JobSatisfaction",
+    "MonthlyIncome",
+    "MonthlyRate",
+    "NumCompaniesWorked",
+    "PercentSalaryHike",
+    "PerformanceRating",
+    "RelationshipSatisfaction",
+    "StockOptionLevel",
+    "TotalWorkingYears",
+    "TrainingTimesLastYear",
+    "WorkLifeBalance",
+    "YearsAtCompany",
+    "YearsInCurrentRole",
+    "YearsSinceLastPromotion",
+    "YearsWithCurrManager",
+    "BusinessTravel",
+    "Department",
+    "EducationField",
+    "Gender",
+    "JobRole",
+    "MaritalStatus",
+    "OverTime"
+  ],
+  "target_mapping": {
+    "No": 0,
+    "Yes": 1
+  },
+  "random_state": 42,
+  "python_version": "3.12.15",
+  "package_versions": {
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.8.0",
+    "joblib": "1.6.0"
+  },
+  "data_sha256": "a5c31e38bd7fafc9bc333884eb181b06b41b8e5e488e8f7ccb27199fb3be7659",
+  "train_rows": 1176,
+  "test_rows": 294,
+  "trained_on": "training partition only; holdout not used for refitting",
+  "metric_definition": "pr_auc is sklearn average_precision_score",
+  "cross_validation": {
+    "dummy": {
+      "roc_auc": {
+        "mean": 0.5,
+        "std": 0.0
+      },
+      "pr_auc": {
+        "mean": 0.16156509195816807,
+        "std": 0.0002740714028128477
+      },
+      "precision": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "recall": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "f1": {
+        "mean": 0.0,
+        "std": 0.0
+      }
+    },
+    "logistic_regression": {
+      "roc_auc": {
+        "mean": 0.8391885728781269,
+        "std": 0.02894125678517016
+      },
+      "pr_auc": {
+        "mean": 0.6514396060738317,
+        "std": 0.061069535881700776
+      },
+      "precision": {
+        "mean": 0.7763499798088571,
+        "std": 0.0744447505777774
+      },
+      "recall": {
+        "mean": 0.4421052631578948,
+        "std": 0.09618772043419509
+      },
+      "f1": {
+        "mean": 0.5610112713477683,
+        "std": 0.09768041119089478
+      }
+    },
+    "logistic_balanced": {
+      "roc_auc": {
+        "mean": 0.827286490337519,
+        "std": 0.028340489193929445
+      },
+      "pr_auc": {
+        "mean": 0.6058279174287123,
+        "std": 0.0817457966522807
+      },
+      "precision": {
+        "mean": 0.37207590684761616,
+        "std": 0.037919220631420995
+      },
+      "recall": {
+        "mean": 0.7368421052631579,
+        "std": 0.062274524032627517
+      },
+      "f1": {
+        "mean": 0.4924709032583049,
+        "std": 0.03367468294500551
+      }
+    },
+    "random_forest": {
+      "roc_auc": {
+        "mean": 0.795238789174135,
+        "std": 0.03104186441899818
+      },
+      "pr_auc": {
+        "mean": 0.5515753741025184,
+        "std": 0.05822347409948412
+      },
+      "precision": {
+        "mean": 0.5977559965389581,
+        "std": 0.08334555529140777
+      },
+      "recall": {
+        "mean": 0.42105263157894746,
+        "std": 0.10786263964168001
+      },
+      "f1": {
+        "mean": 0.48430404794210763,
+        "std": 0.08464820937819398
+      }
+    },
+    "hist_gradient_boosting": {
+      "roc_auc": {
+        "mean": 0.820008257838875,
+        "std": 0.03118241697762887
+      },
+      "pr_auc": {
+        "mean": 0.6041445858010743,
+        "std": 0.04478157130931545
+      },
+      "precision": {
+        "mean": 0.7509426246268351,
+        "std": 0.0594084639196868
+      },
+      "recall": {
+        "mean": 0.3,
+        "std": 0.06137844099837158
+      },
+      "f1": {
+        "mean": 0.4252979444011965,
+        "std": 0.06635850593834984
+      }
+    },
+    "logistic_without_sensitive": {
+      "roc_auc": {
+        "mean": 0.8372641725834352,
+        "std": 0.023445161466191262
+      },
+      "pr_auc": {
+        "mean": 0.6320248194409064,
+        "std": 0.058153226906816215
+      },
+      "precision": {
+        "mean": 0.7331005379060299,
+        "std": 0.11468031593531729
+      },
+      "recall": {
+        "mean": 0.42105263157894735,
+        "std": 0.08962834929434949
+      },
+      "f1": {
+        "mean": 0.5343840150529143,
+        "std": 0.10317590785524565
+      }
+    },
+    "logistic_reduced_correlations": {
+      "roc_auc": {
+        "mean": 0.838044889180342,
+        "std": 0.025977646876578622
+      },
+      "pr_auc": {
+        "mean": 0.646710846154039,
+        "std": 0.05903069905840082
+      },
+      "precision": {
+        "mean": 0.7686089996959563,
+        "std": 0.09281066966157228
+      },
+      "recall": {
+        "mean": 0.43157894736842095,
+        "std": 0.07912261251775216
+      },
+      "f1": {
+        "mean": 0.5493858216611184,
+        "std": 0.0784424835634043
+      }
+    }
+  },
+  "holdout_at_0_5": {
+    "dummy": {
+      "roc_auc": 0.5,
+      "pr_auc": 0.1598639455782313,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "brier_score": 0.13431035679577952,
+      "threshold": 0.5,
+      "true_negatives": 247,
+      "false_positives": 0,
+      "false_negatives": 47,
+      "true_positives": 0,
+      "n": 294,
+      "positive_count": 47,
+      "confusion_matrix": [
+        [
+          247,
+          0
+        ],
+        [
+          47,
+          0
+        ]
+      ]
+    },
+    "logistic_regression": {
+      "roc_auc": 0.8115255405289,
+      "pr_auc": 0.5836342531326222,
+      "precision": 0.6153846153846154,
+      "recall": 0.3404255319148936,
+      "f1": 0.4383561643835616,
+      "brier_score": 0.09918620635299684,
+      "threshold": 0.5,
+      "true_negatives": 237,
+      "false_positives": 10,
+      "false_negatives": 31,
+      "true_positives": 16,
+      "n": 294,
+      "positive_count": 47,
+      "confusion_matrix": [
+        [
+          237,
+          10
+        ],
+        [
+          31,
+          16
+        ]
+      ]
+    },
+    "logistic_balanced": {
+      "roc_auc": 0.8031699543457662,
+      "pr_auc": 0.5612212444049638,
+      "precision": 0.3488372093023256,
+      "recall": 0.6382978723404256,
+      "f1": 0.45112781954887216,
+      "brier_score": 0.15608746978216037,
+      "threshold": 0.5,
+      "true_negatives": 191,
+      "false_positives": 56,
+      "false_negatives": 17,
+      "true_positives": 30,
+      "n": 294,
+      "positive_count": 47,
+      "confusion_matrix": [
+        [
+          191,
+          56
+        ],
+        [
+          17,
+          30
+        ]
+      ]
+    },
+    "random_forest": {
+      "roc_auc": 0.7888707037643208,
+      "pr_auc": 0.43592707052482366,
+      "precision": 0.5238095238095238,
+      "recall": 0.46808510638297873,
+      "f1": 0.4943820224719101,
+      "brier_score": 0.1369566377967183,
+      "threshold": 0.5,
+      "true_negatives": 227,
+      "false_positives": 20,
+      "false_negatives": 25,
+      "true_positives": 22,
+      "n": 294,
+      "positive_count": 47,
+      "confusion_matrix": [
+        [
+          227,
+          20
+        ],
+        [
+          25,
+          22
+        ]
+      ]
+    },
+    "hist_gradient_boosting": {
+      "roc_auc": 0.7959341889912999,
+      "pr_auc": 0.5417477582996806,
+      "precision": 0.7857142857142857,
+      "recall": 0.23404255319148937,
+      "f1": 0.36065573770491804,
+      "brier_score": 0.10377892267152232,
+      "threshold": 0.5,
+      "true_negatives": 244,
+      "false_positives": 3,
+      "false_negatives": 36,
+      "true_positives": 11,
+      "n": 294,
+      "positive_count": 47,
+      "confusion_matrix": [
+        [
+          244,
+          3
+        ],
+        [
+          36,
+          11
+        ]
+      ]
+    }
+  },
+  "selected_threshold": 0.2,
+  "selected_model_metrics": {
+    "roc_auc": 0.8115255405289,
+    "pr_auc": 0.5836342531326222,
+    "precision": 0.4225352112676056,
+    "recall": 0.6382978723404256,
+    "f1": 0.5084745762711864,
+    "brier_score": 0.09918620635299684,
+    "threshold": 0.2,
+    "true_negatives": 206,
+    "false_positives": 41,
+    "false_negatives": 17,
+    "true_positives": 30,
+    "n": 294,
+    "positive_count": 47,
+    "confusion_matrix": [
+      [
+        206,
+        41
+      ],
+      [
+        17,
+        30
+      ]
+    ]
+  },
+  "selection_reason": "Selection uses only five-fold training average precision. Prefer unweighted, then balanced logistic regression when within 0.01 AP of the best non-dummy model, for interpretability and simpler operation. Otherwise use the highest mean AP. Best AP candidate: logistic_regression; selected: logistic_regression. This rule was fixed before holdout evaluation.",
+  "threshold_rule": "Maximize training OOF F2, ties: precision then threshold",
+  "shap": {
+    "status": "generated",
+    "units": "log-odds of Attrition=Yes",
+    "rows": 60,
+    "individual_holdout_position": 0,
+    "individual_base_value": -2.321987072933257,
+    "individual_model_probability": 0.0770764240558973
+  },
+  "sensitive_ablation": {
+    "excluded": [
+      "Gender",
+      "Age",
+      "MaritalStatus"
+    ],
+    "cv_ap_change": -0.019414786632925285
+  },
+  "correlation_ablation": {
+    "excluded": [
+      "JobLevel",
+      "YearsInCurrentRole",
+      "YearsWithCurrManager"
+    ],
+    "cv_ap_change": -0.004728759919792713
+  }
+}

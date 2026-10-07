@@ -1,0 +1,52 @@
+feature,coefficient
+JobRole_Laboratory Technician,1.1943325530473066
+JobRole_Sales Representative,1.1206165881634236
+BusinessTravel_Travel_Frequently,0.7875664615769833
+OverTime_Yes,0.7615220595490872
+EducationField_Human Resources,0.7211292387661913
+JobLevel,0.6074258468489235
+YearsSinceLastPromotion,0.502530948115179
+JobRole_Human Resources,0.46388612205572977
+NumCompaniesWorked,0.4604957076987785
+MaritalStatus_Single,0.45727739476461865
+Department_Sales,0.35690202012340716
+EducationField_Technical Degree,0.35075017277811804
+DistanceFromHome,0.3183525983246718
+YearsAtCompany,0.25072514525517847
+PerformanceRating,0.1402573621674154
+Gender_Male,0.0959173355360285
+BusinessTravel_Travel_Rarely,0.07503210892916244
+MonthlyRate,0.024712682352324718
+Education,0.014309320185006372
+EducationField_Marketing,0.00832289110691936
+HourlyRate,-0.0480830224110081
+JobRole_Research Scientist,-0.07063413337775243
+JobRole_Sales Executive,-0.08087844223607471
+MaritalStatus_Married,-0.10633308864947688
+TrainingTimesLastYear,-0.16782328327943116
+EducationField_Medical,-0.17955529089713526
+StockOptionLevel,-0.20283084616066005
+DailyRate,-0.22295518385599164
+WorkLifeBalance,-0.2235978232858062
+Gender_Female,-0.22720378631893914
+YearsInCurrentRole,-0.23110743004097392
+EducationField_Life Sciences,-0.2338259448870911
+PercentSalaryHike,-0.23476649743282668
+Department_Research & Development,-0.23731509681416546
+RelationshipSatisfaction,-0.24793984812364805
+Department_Human Resources,-0.250873374092155
+JobRole_Manufacturing Director,-0.2641335228179619
+Age,-0.2743586388987946
+MonthlyIncome,-0.28296745066399226
+JobInvolvement,-0.28794943564930503
+JobRole_Manager,-0.38159120381521977
+JobSatisfaction,-0.3888758511543346
+EnvironmentSatisfaction,-0.42618471056420026
+YearsWithCurrManager,-0.4546739804551845
+MaritalStatus_Divorced,-0.48223075689806
+TotalWorkingYears,-0.6202341455876411
+JobRole_Healthcare Representative,-0.6472018534513686
+EducationField_Other,-0.7981075176499128
+OverTime_No,-0.8928085103320001
+BusinessTravel_Non-Travel,-0.99388502128906
+JobRole_Research Director,-1.46568255835099

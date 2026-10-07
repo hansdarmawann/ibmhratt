@@ -1,0 +1,52 @@
+feature,mean_absolute_shap
+YearsSinceLastPromotion,0.4289302254517088
+EnvironmentSatisfaction,0.4126077495911518
+OverTime_No,0.408050887946116
+OverTime_Yes,0.4024827673977052
+NumCompaniesWorked,0.40189475737328484
+TotalWorkingYears,0.35633601745590204
+YearsWithCurrManager,0.3396941720870555
+JobSatisfaction,0.32798152620527105
+Age,0.31416518791514253
+JobInvolvement,0.30842683639689916
+BusinessTravel_Travel_Frequently,0.2838019497423201
+YearsInCurrentRole,0.2818276004087339
+DistanceFromHome,0.26928223001572305
+JobRole_Laboratory Technician,0.26786823137308763
+StockOptionLevel,0.2662920424402306
+RelationshipSatisfaction,0.24679851268295622
+MaritalStatus_Single,0.2149301852100285
+WorkLifeBalance,0.18739439916012832
+JobLevel,0.17704819487914294
+DailyRate,0.164901968020128
+TrainingTimesLastYear,0.1631414349104491
+Department_Research & Development,0.1420300716958249
+Department_Sales,0.13360530888220684
+EducationField_Medical,0.129863772714892
+BusinessTravel_Non-Travel,0.12218014435111584
+MonthlyIncome,0.10982258612713873
+YearsAtCompany,0.1027177944429868
+JobRole_Research Director,0.10203571827079323
+JobRole_Sales Representative,0.09947162551803675
+JobRole_Healthcare Representative,0.09674618667591325
+MaritalStatus_Married,0.0958578179415266
+PercentSalaryHike,0.08851668701091797
+MaritalStatus_Divorced,0.088390490504508
+Gender_Female,0.08238108145735885
+Gender_Male,0.07601027281775224
+JobRole_Research Scientist,0.06988110856289372
+EducationField_Life Sciences,0.05411525162701463
+EducationField_Technical Degree,0.053704377982812725
+JobRole_Manufacturing Director,0.04581807896999739
+PerformanceRating,0.040618490800875026
+EducationField_Other,0.03718625522245625
+JobRole_Human Resources,0.026188461980528377
+JobRole_Sales Executive,0.019475251121862904
+EducationField_Marketing,0.018206978438295166
+EducationField_Human Resources,0.017991397310502047
+MonthlyRate,0.012271115932100176
+HourlyRate,0.007620791004827081
+Education,0.005806495848572657
+JobRole_Manager,0.004757627370639931
+BusinessTravel_Travel_Rarely,0.0021832927049680846
+Department_Human Resources,0.0009478191173990448

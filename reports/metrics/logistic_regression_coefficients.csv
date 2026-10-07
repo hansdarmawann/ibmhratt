@@ -1,0 +1,52 @@
+feature,coefficient
+JobRole_Laboratory Technician,1.03026242835803
+OverTime_Yes,0.9161216253362033
+BusinessTravel_Travel_Frequently,0.8981074358934179
+JobRole_Sales Representative,0.8802798718410323
+EducationField_Human Resources,0.5997132436834018
+YearsSinceLastPromotion,0.535576301329428
+NumCompaniesWorked,0.48340590576030185
+MaritalStatus_Single,0.47550925931422255
+EducationField_Technical Degree,0.40995708383826457
+DistanceFromHome,0.38304434699375856
+JobRole_Human Resources,0.3273557747566047
+Department_Sales,0.30136535838091766
+JobLevel,0.22367145564992447
+YearsAtCompany,0.15858673482864838
+Gender_Male,0.15121407059234537
+EducationField_Marketing,0.09103489219147588
+PerformanceRating,0.08308433541859904
+MonthlyRate,0.014195887396806663
+Education,0.010078571850888155
+BusinessTravel_Travel_Rarely,0.005569624247367556
+HourlyRate,-0.008216583003627799
+Department_Human Resources,-0.01184773896748807
+JobRole_Manager,-0.043251157914908356
+JobRole_Sales Executive,-0.05263581384287273
+EducationField_Life Sciences,-0.10903005700540219
+PercentSalaryHike,-0.12140288886068104
+MonthlyIncome,-0.13873765340000174
+Gender_Female,-0.1638880930849313
+DailyRate,-0.177322944611779
+TrainingTimesLastYear,-0.18511553585472665
+MaritalStatus_Married,-0.19057220266705097
+JobRole_Research Scientist,-0.1941141904524824
+RelationshipSatisfaction,-0.28613663864864364
+EducationField_Medical,-0.2892288924607841
+StockOptionLevel,-0.29364820486022203
+MaritalStatus_Divorced,-0.29761107913975765
+WorkLifeBalance,-0.30025245118853816
+Department_Research & Development,-0.3021916419060101
+YearsInCurrentRole,-0.3450777856229199
+JobRole_Manufacturing Director,-0.3471066588636167
+JobInvolvement,-0.35778913623000225
+YearsWithCurrManager,-0.39180791218873806
+Age,-0.40828594243931204
+JobSatisfaction,-0.412517919042031
+EnvironmentSatisfaction,-0.47165733558498124
+TotalWorkingYears,-0.5203622610396309
+JobRole_Healthcare Representative,-0.5793184830893013
+EducationField_Other,-0.7151202927395424
+BusinessTravel_Non-Travel,-0.9163510826333676
+OverTime_No,-0.9287956478287924
+JobRole_Research Director,-1.0341457932850684
