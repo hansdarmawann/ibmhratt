@@ -104,7 +104,7 @@ jobs:
             type=ref,event=tag
             type=sha,format=long,prefix=sha-
       - name: Build the image for local validation
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           load: true
