@@ -360,6 +360,33 @@
       ]
     ]
   },
+  "selected_model_ci": {
+    "method": "stratified percentile bootstrap of the holdout; model and threshold frozen",
+    "confidence": 0.95,
+    "replicates": 1000,
+    "intervals": {
+      "pr_auc": {
+        "lower": 0.45973303704559426,
+        "upper": 0.710763214314672
+      },
+      "roc_auc": {
+        "lower": 0.733523559307434,
+        "upper": 0.8834094237229735
+      },
+      "precision": {
+        "lower": 0.3333333333333333,
+        "upper": 0.5173385138416706
+      },
+      "recall": {
+        "lower": 0.48936170212765956,
+        "upper": 0.7664893617021272
+      },
+      "f1": {
+        "lower": 0.40383771929824563,
+        "upper": 0.6072185230024212
+      }
+    }
+  },
   "selection_reason": "Selection uses only five-fold training average precision. Prefer unweighted, then balanced logistic regression when within 0.01 AP of the best non-dummy model, for interpretability and simpler operation. Otherwise use the highest mean AP. Best AP candidate: logistic_regression; selected: logistic_regression. This rule was fixed before holdout evaluation.",
   "threshold_rule": "Maximize training OOF F2, ties: precision then threshold",
   "shap": {

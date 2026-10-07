@@ -35,7 +35,7 @@ def save_eda_plots(X: pd.DataFrame, y: pd.Series, directory: Path) -> None:
 
     fig, axes = plt.subplots(2, 3, figsize=(13, 7))
     for col, ax in zip(["Age", "MonthlyIncome", "DistanceFromHome", "TotalWorkingYears",
-                        "YearsAtCompany", "DailyRate"], axes.flat):
+                        "YearsAtCompany", "DailyRate"], axes.flat, strict=True):
         for label, color in [(0, "#357b89"), (1, "#d27a43")]:
             ax.hist(X.loc[y == label, col], bins=16, density=True, alpha=0.55,
                     label="Yes" if label else "No", color=color)
@@ -45,9 +45,9 @@ def save_eda_plots(X: pd.DataFrame, y: pd.Series, directory: Path) -> None:
     save_figure(fig, directory / "numeric_distributions.png")
 
     fig, axes = plt.subplots(1, 3, figsize=(14, 4))
-    for col, ax in zip(["OverTime", "BusinessTravel", "JobRole"], axes):
+    for col, ax in zip(["OverTime", "BusinessTravel", "JobRole"], axes, strict=True):
         table = pd.DataFrame({col: X[col], "target": y}).groupby(col)["target"].agg(["mean", "size"])
-        ax.barh([f"{v} (n={n})" for v, n in zip(table.index, table["size"])], table["mean"], color="#357b89")
+        ax.barh([f"{v} (n={n})" for v, n in zip(table.index, table["size"], strict=True)], table["mean"], color="#357b89")
         ax.set(title=col, xlabel="Observed attrition rate", xlim=(0, max(0.5, table["mean"].max() + 0.05)))
     save_figure(fig, directory / "categorical_attrition.png")
 

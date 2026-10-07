@@ -73,6 +73,10 @@ def main() -> None:
     for name in ["roc_auc", "pr_auc", "precision", "recall", "f1", "brier_score"]:
         np.testing.assert_allclose(actual[name], report["selected_model_metrics"][name])
     assert actual["confusion_matrix"] == report["selected_model_metrics"]["confusion_matrix"]
+    intervals = pd.read_csv(METRICS_DIR / "holdout_bootstrap_ci.csv")
+    for row in intervals.itertuples():
+        np.testing.assert_allclose(row.estimate, actual[row.metric])
+        assert row.lower <= row.estimate <= row.upper, f"Point estimate outside interval for {row.metric}"
     oof = pd.read_csv(ROOT / "data/processed/oof_predictions.csv")
     assert set(oof.row_index) == set(X_train.index)
     assert not oof.row_index.duplicated().any()

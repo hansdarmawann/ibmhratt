@@ -1,7 +1,7 @@
 """Exercise real startup, schema validation, and API/model parity."""
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from app.api import create_app
 from src.models.predict import predict

@@ -24,7 +24,7 @@ def test_batch_order_and_nulls(employee, fitted_pipeline):
     second = {**employee, "MonthlyIncome": None, "JobRole": "New role"}
     results = predict(pd.DataFrame([employee, second]), pipeline=fitted_pipeline)
     assert len(results) == 2
-    for result, record in zip(results, [employee, second]):
+    for result, record in zip(results, [employee, second], strict=True):
         single = predict(record, pipeline=fitted_pipeline)
         assert result["predicted_class"] == single["predicted_class"]
         assert result["decision_threshold"] == single["decision_threshold"]

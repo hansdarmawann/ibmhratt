@@ -3,17 +3,24 @@
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
-    average_precision_score, brier_score_loss, confusion_matrix, f1_score,
-    precision_score, recall_score, roc_auc_score,
+    average_precision_score,
+    brier_score_loss,
+    confusion_matrix,
+    f1_score,
+    make_scorer,
+    precision_score,
+    recall_score,
+    roc_auc_score,
 )
 from sklearn.model_selection import cross_validate
 
-from src.config import DEFAULT_THRESHOLD
+from src.config import DEFAULT_THRESHOLD, RANDOM_STATE
 
 SCORING = {
     "roc_auc": "roc_auc", "pr_auc": "average_precision", "precision": "precision",
     "recall": "recall", "f1": "f1",
 }
+BOOTSTRAP_METRICS = ["pr_auc", "roc_auc", "precision", "recall", "f1"]
 
 
 def evaluate_probabilities(y_true, probabilities,
@@ -47,8 +54,6 @@ def evaluate_probabilities(y_true, probabilities,
 def cross_validation_metrics(pipeline, X, y, cv) -> tuple[dict, pd.DataFrame]:
     """Clone/refit the entire pipeline independently in each stratified fold."""
     # zero_division is explicit, including for the all-retained dummy baseline.
-    from sklearn.metrics import make_scorer
-
     scoring = {**SCORING, "precision": make_scorer(precision_score, zero_division=0)}
     results = cross_validate(pipeline, X, y, cv=cv, scoring=scoring,
                              n_jobs=1, error_score="raise")
@@ -57,6 +62,39 @@ def cross_validation_metrics(pipeline, X, y, cv) -> tuple[dict, pd.DataFrame]:
     summary = {m: {"mean": float(folds[m].mean()), "std": float(folds[m].std(ddof=0))}
                for m in SCORING}
     return summary, folds
+
+
+def bootstrap_intervals(y_true, probabilities, threshold: float, *, n_boot: int = 1000,
+                        confidence: float = 0.95, seed: int = RANDOM_STATE) -> pd.DataFrame:
+    """Stratified percentile bootstrap for one frozen model and threshold.
+
+    Resampling within each class keeps holdout prevalence fixed, so every replicate
+    contains both classes. Intervals describe holdout sampling variability only;
+    they do not cover split, model-selection, or threshold-selection variability.
+    """
+    if n_boot < 1 or not 0 < confidence < 1:
+        raise ValueError("Use at least one replicate and a confidence level in (0, 1).")
+    y = np.asarray(y_true)
+    probabilities = np.asarray(probabilities, dtype=float)
+    point = evaluate_probabilities(y, probabilities, threshold)
+    by_class = [np.flatnonzero(y == label) for label in (0, 1)]
+    if any(len(rows) == 0 for rows in by_class):
+        raise ValueError("Bootstrap intervals require both classes in the holdout.")
+    rng = np.random.default_rng(seed)
+    replicates = {metric: np.empty(n_boot) for metric in BOOTSTRAP_METRICS}
+    for i in range(n_boot):
+        rows = np.concatenate([rng.choice(group, size=len(group), replace=True) for group in by_class])
+        metrics = evaluate_probabilities(y[rows], probabilities[rows], threshold)
+        for metric in BOOTSTRAP_METRICS:
+            replicates[metric][i] = metrics[metric]
+    alpha = (1 - confidence) / 2
+    return pd.DataFrame([
+        {"metric": metric, "estimate": point[metric],
+         "lower": float(np.quantile(replicates[metric], alpha)),
+         "upper": float(np.quantile(replicates[metric], 1 - alpha)),
+         "confidence": confidence, "replicates": n_boot, "threshold": float(threshold)}
+        for metric in BOOTSTRAP_METRICS
+    ])
 
 
 def subgroup_metrics(X: pd.DataFrame, y: pd.Series, probabilities, threshold: float) -> pd.DataFrame:

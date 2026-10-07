@@ -80,11 +80,15 @@ def main() -> None:
             m = report["selected_model_metrics"]
             columns = st.columns(4)
             for column, key, label in zip(columns, ["pr_auc", "recall", "precision", "f1"],
-                                           ["Average precision", "Recall", "Precision", "F1"]):
+                                           ["Average precision", "Recall", "Precision", "F1"], strict=True):
                 column.metric(label, f"{m[key]:.3f}")
             st.caption(f"Final holdout at threshold {report['selected_threshold']:.2f}. "
                        "AP summarizes ranking across thresholds. The table below uses threshold 0.50.")
             show_table("model_comparison.csv")
+            if (METRICS_DIR / "holdout_bootstrap_ci.csv").exists():
+                st.caption("Stratified bootstrap intervals for the selected model at its frozen threshold. "
+                           "They reflect holdout sampling variability only.")
+                show_table("holdout_bootstrap_ci.csv")
             show_figure("precision_recall_curve.png", "Holdout precision-recall comparison")
             show_figure("roc_curve.png", "Holdout ROC comparison")
             show_figure("threshold_analysis.png", "Threshold chosen on training out-of-fold F2, before examining holdout labels")

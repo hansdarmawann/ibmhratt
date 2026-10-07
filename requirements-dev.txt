@@ -1,0 +1,9 @@
+# Runtime plus testing, coverage, linting, and notebook execution.
+-r requirements.txt
+pytest>=8.3,<10
+pytest-cov>=6.0,<8
+httpx>=0.28,<1
+nbformat>=5.10,<6
+nbclient>=0.10,<1
+ipykernel>=6.29,<8
+ruff>=0.15,<0.17

@@ -1,8 +1,20 @@
 # Employee Attrition ML
 
+[![CI/CD](https://github.com/hansdarmawann/ibmhratt/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/hansdarmawann/ibmhratt/actions/workflows/ci-cd.yml)
+
 An end-to-end Python portfolio project that estimates employee attrition probabilities, compares interpretable and tree-based models, and serves the saved pipeline through FastAPI and Streamlit. Model selection and threshold tuning use training data; a reserved holdout provides final evaluation.
 
 **Educational analysis only. This project must not be used as an automated system for firing, promotion, hiring, disciplinary action, or other high-impact employment decisions.** Outputs are analytical signals, not causal evidence or reliable forecasts for individuals.
+
+## Quickstart
+
+```bash
+conda env create -f environment.yml && conda activate ibmhratt
+python -m src.models.train            # validate data, compare models, save the pipeline and reports
+python -m pytest -q                   # unit and integration tests
+python -m uvicorn app.api:app --port 8000      # API docs at http://127.0.0.1:8000/docs
+python -m streamlit run app/streamlit_app.py   # dashboard at http://localhost:8501
+```
 
 ## Business problem
 
@@ -66,10 +78,12 @@ ibmhratt/
 ├── scripts/                    # Notebook generation/execution
 ├── tests/                      # Data, leakage boundary, inference, API, UI
 ├── environment.yml
-├── requirements.txt
+├── requirements.txt            # Runtime dependencies (training, API, dashboard, Docker)
+├── requirements-dev.txt        # Runtime plus tests, coverage, lint, notebook execution
 ├── requirements-explain.txt    # Optional SHAP dependency
 ├── requirements-lock.txt       # Exact package constraints from verified Conda run
 ├── Dockerfile
+├── pyproject.toml              # Ruff, pytest, and coverage settings
 └── Makefile
 ```
 
@@ -81,12 +95,12 @@ Run commands from the repository root. Python **3.12** is the verified runtime.
 # Only if the environment does not already exist:
 conda create -n ibmhratt python=3.12 pip -y
 conda activate ibmhratt
-python -m pip install -r requirements.txt -c requirements-lock.txt
+python -m pip install -r requirements-dev.txt -c requirements-lock.txt
 python -m src.models.train
 python -m pytest -q
 ```
 
-Alternatively, `conda env create -f environment.yml` creates the named environment using the same package constraints. `requirements.txt` declares supported ranges; the lock file pins the packages used for the recorded results. Use the constraints above when reproducing them. Platforms may install different platform-specific transitive dependencies.
+Alternatively, `conda env create -f environment.yml` creates the named environment using the same package constraints. `requirements.txt` declares supported runtime ranges and is all the Docker image installs; `requirements-dev.txt` adds testing, linting, and notebook tools; the lock file pins the packages used for the recorded results. Use the constraints above when reproducing them. Platforms may install different platform-specific transitive dependencies.
 
 If activation is inconvenient, use `conda run --no-capture-output -n ibmhratt python -m src.models.train`. In VS Code, select **Python (ibmhratt)** as the interpreter and notebook kernel. All project paths are derived from `src/config.py`, without machine-specific absolute paths.
 
@@ -136,6 +150,8 @@ Selected **logistic_regression** at threshold **0.20**, chosen by maximum F2 on 
 
 At the frozen operating threshold, holdout AP = **0.584**, ROC-AUC = **0.812**, precision = **0.423**, recall = **0.638**, F1 = **0.508**.
 
+95% stratified bootstrap intervals (1,000 holdout resamples, frozen model and threshold): AP [0.460, 0.711], ROC-AUC [0.734, 0.883], precision [0.333, 0.517], recall [0.489, 0.766], F1 [0.404, 0.607]. They reflect holdout sampling variability only, not split or model-selection variability.
+
 - True positives: 30 observed attrition cases flagged.
 - True negatives: 206 observed retention cases not flagged.
 - False positives: 41 observed retention cases flagged.
@@ -155,7 +171,7 @@ The selected model generates training out-of-fold probabilities with the same fi
 
 F2 expresses an educational preference for recall; it is not an estimated dollar cost. A missed support opportunity could matter more than an unnecessary outreach, but that needs an agreed intervention policy and capacity constraints. A lower threshold increases the number of flagged records. The API and dashboard use the threshold bundled with the model, rather than defaulting to 0.50.
 
-OOF threshold scores reuse the training folds used for model selection and can be optimistic. Final holdout metrics are reported separately. The saved pipeline remains fitted only on the training partition, preserving correspondence between the evaluated model and deployed demo.
+OOF threshold scores reuse the training folds used for model selection and can be optimistic. Final holdout metrics are reported separately, with 95% stratified bootstrap intervals for the selected model ([holdout_bootstrap_ci.csv](reports/metrics/holdout_bootstrap_ci.csv)). These intervals cover holdout sampling only, not split or selection variability. The saved pipeline remains fitted only on the training partition, preserving correspondence between the evaluated model and deployed demo.
 
 ## Explainability
 
@@ -219,16 +235,17 @@ The Python 3.12 slim image installs constrained dependencies and trains the mode
 ## Testing and reproducibility
 
 ```bash
-python -m pytest -q
+python -m ruff check .
+python -m pytest -q --cov --cov-report=term
 python -m scripts.execute_notebooks
 python -m scripts.verify_delivery
 ```
 
-The pytest suite includes unit tests and integration tests. Tests cover loading/schema failures against the canonical `data/raw/` CSV, disjoint stratified partitions, train-only imputation statistics, unknown categories/nulls, dictionary/batch prediction, serialization parity, stored threshold use, known confusion counts, API validation and unavailable-model behavior, and an automated Streamlit form submission. Test fixtures train a small real pipeline; tests do not require a pretrained production artifact or manual interaction.
+The pytest suite includes unit tests and integration tests. Tests cover loading/schema failures against the canonical `data/raw/` CSV, disjoint stratified partitions, train-only imputation statistics, unknown categories/nulls, dictionary/batch prediction, serialization parity, stored threshold use, known confusion counts, API validation and unavailable-model behavior, model-selection and threshold tie-break rules, subgroup denominators, README result injection, deterministic bootstrap intervals, and an automated Streamlit form submission. Test fixtures train a small real pipeline; tests do not require a pretrained production artifact or manual interaction.
 
-After training and notebook execution, `scripts.verify_delivery` also checks the delivered artifact against its recorded metrics, OOF coverage, SHAP additivity, executed notebook cells, and actual loopback HTTP startup/prediction for both services. Its temporary servers are stopped automatically.
+After training and notebook execution, `scripts.verify_delivery` also checks the delivered artifact against its recorded metrics and bootstrap point estimates, OOF coverage, SHAP additivity, executed notebook cells, and actual loopback HTTP startup/prediction for both services. Its temporary servers are stopped automatically.
 
-`make install`, `make train`, `make explain`, `make test`, `make api`, `make app`, and `make notebooks` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
+`make install`, `make train`, `make explain`, `make lint`, `make test`, `make coverage`, `make api`, `make app`, and `make notebooks` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
 
 Model binaries and generated split/OOF CSVs are gitignored because they are reproducible outputs. Source, raw data, executed notebooks, metrics, and figures are intended for Git. `models/.gitkeep` and `data/processed/.gitkeep` preserve their folders. Model metadata records the raw CSV SHA-256, package/Python versions, seed, features, row counts, and threshold. No Git commit or remote deployment is required to run locally.
 
@@ -236,7 +253,7 @@ Model binaries and generated split/OOF CSVs are gitignored because they are repr
 
 [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) runs on pull requests, pushes to `main`, version tags matching `v*`, and manual dispatch.
 
-- **CI:** Python 3.12 on Ubuntu and Windows, constrained dependency installation, `pip check`, all pytest tests, fresh training with SHAP, notebook execution, and delivery verification including live API/dashboard startup. Test results and generated model/report artifacts are retained for 14 days.
+- **CI:** Python 3.12 on Ubuntu and Windows, constrained dependency installation, `pip check`, Ruff lint, all pytest tests with coverage, fresh training with SHAP, a check that the committed README and `reports/results.md` match the fresh run, notebook execution, and delivery verification including live API/dashboard startup. Test results and generated model/report artifacts are retained for 14 days.
 - **Container validation:** after both CI jobs pass, build the Docker image and test its real `/health` and `/predict` endpoints. Pull requests and manual runs build and test without publishing.
 - **CD (continuous delivery):** after container validation passes on a push to `main` or a `v*` tag, publish that same tested image to `ghcr.io/<owner>/<repository>`. Main publishes `latest` and a commit SHA tag; version tags publish the Git tag and a commit SHA tag. This delivers a container image; running it on a server is a separate deployment step.
 

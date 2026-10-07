@@ -9,28 +9,44 @@ import platform
 from pathlib import Path
 
 import joblib
-import numpy as np
 import pandas as pd
-from threadpoolctl import threadpool_limits
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from threadpoolctl import threadpool_limits
 
 from src.config import (
-    CV_FOLDS, DATA_PATH, DEFAULT_THRESHOLD, FEATURE_COLUMNS, FIGURES_DIR, METRICS_DIR,
-    MODEL_PATH, RANDOM_STATE, REDUNDANT_COLUMNS, ROOT, SENSITIVE_COLUMNS, TARGET_MAPPING,
+    CV_FOLDS,
+    DATA_PATH,
+    DEFAULT_THRESHOLD,
+    FEATURE_COLUMNS,
+    FIGURES_DIR,
+    METRICS_DIR,
+    MODEL_PATH,
+    RANDOM_STATE,
+    REDUNDANT_COLUMNS,
+    ROOT,
+    SENSITIVE_COLUMNS,
+    TARGET_MAPPING,
 )
 from src.data.explore import save_exploration
 from src.data.load_data import load_data, split_data
 from src.data.validate_data import data_audit
 from src.features.preprocess import build_pipeline, feature_exclusions
-from src.models.evaluate import cross_validation_metrics, evaluate_probabilities, subgroup_metrics
+from src.models.evaluate import (
+    bootstrap_intervals,
+    cross_validation_metrics,
+    evaluate_probabilities,
+    subgroup_metrics,
+)
 from src.models.explain import explain_models, explain_shap
 from src.models.threshold import select_threshold, threshold_table
 from src.visualization.plots import save_evaluation_plots
 
 LOGGER = logging.getLogger(__name__)
+RESULTS_START, RESULTS_END = "<!-- RESULTS:START -->", "<!-- RESULTS:END -->"
+CI_LABELS = {"pr_auc": "AP", "roc_auc": "ROC-AUC", "precision": "precision", "recall": "recall", "f1": "F1"}
 
 
 def save_json(value: dict, path: Path) -> None:
@@ -89,8 +105,15 @@ def markdown_results(report: dict) -> str:
              "chosen by maximum F2 on training out-of-fold predictions.", "",
              f"At the frozen operating threshold, holdout AP = **{m['pr_auc']:.3f}**, "
              f"ROC-AUC = **{m['roc_auc']:.3f}**, precision = **{m['precision']:.3f}**, "
-             f"recall = **{m['recall']:.3f}**, F1 = **{m['f1']:.3f}**.", "",
-             f"- True positives: {m['true_positives']} observed attrition cases flagged.",
+             f"recall = **{m['recall']:.3f}**, F1 = **{m['f1']:.3f}**.", ""]
+    ci = report.get("selected_model_ci")
+    if ci:
+        bounds = ", ".join(f"{label} [{ci['intervals'][key]['lower']:.3f}, {ci['intervals'][key]['upper']:.3f}]"
+                           for key, label in CI_LABELS.items())
+        rows += [f"{ci['confidence']:.0%} stratified bootstrap intervals ({ci['replicates']:,} holdout resamples, "
+                 f"frozen model and threshold): {bounds}. They reflect holdout sampling variability only, "
+                 "not split or model-selection variability.", ""]
+    rows += [f"- True positives: {m['true_positives']} observed attrition cases flagged.",
              f"- True negatives: {m['true_negatives']} observed retention cases not flagged.",
              f"- False positives: {m['false_positives']} observed retention cases flagged.",
              f"- False negatives: {m['false_negatives']} observed attrition cases missed.", "",
@@ -99,6 +122,15 @@ def markdown_results(report: dict) -> str:
              "not an unbiased performance estimate. The holdout is evaluated after choices are frozen. "
              f"There are {m['positive_count']} positive holdout examples, so small count changes materially affect recall."]
     return "\n".join(rows) + "\n"
+
+
+def replace_results_block(contents: str, result_text: str) -> str:
+    """Swap only the generated block between README markers; other text is untouched."""
+    if RESULTS_START not in contents or RESULTS_END not in contents:
+        return contents
+    before = contents.split(RESULTS_START, 1)[0]
+    after = contents.split(RESULTS_END, 1)[1]
+    return before + RESULTS_START + "\n\n" + result_text + "\n" + RESULTS_END + after
 
 
 def train(data_path: Path = DATA_PATH, *, with_shap: bool = False) -> dict:
@@ -152,6 +184,9 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False) -> dict:
     explain_models(pipelines, selected, X_test, y_test, METRICS_DIR, FIGURES_DIR)
     subgroup_metrics(X_test, y_test, probabilities[selected], threshold).to_csv(
         METRICS_DIR / "subgroup_metrics.csv", index=False)
+    # Uncertainty of the frozen choice only; intervals never feed back into selection.
+    intervals = bootstrap_intervals(y_test, probabilities[selected], threshold)
+    intervals.to_csv(METRICS_DIR / "holdout_bootstrap_ci.csv", index=False)
     shap_status = (explain_shap(pipelines[selected], X_train, X_test, METRICS_DIR, FIGURES_DIR)
                    if with_shap else {"status": "not_requested", "enable": "python -m src.models.train --with-shap"})
     versions = {name: importlib.metadata.version(name)
@@ -176,6 +211,13 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False) -> dict:
         **metadata, "metric_definition": "pr_auc is sklearn average_precision_score",
         "cross_validation": summaries, "holdout_at_0_5": holdout,
         "selected_threshold": threshold, "selected_model_metrics": selected_metrics,
+        "selected_model_ci": {
+            "method": "stratified percentile bootstrap of the holdout; model and threshold frozen",
+            "confidence": float(intervals["confidence"].iloc[0]),
+            "replicates": int(intervals["replicates"].iloc[0]),
+            "intervals": {row.metric: {"lower": float(row.lower), "upper": float(row.upper)}
+                          for row in intervals.itertuples()},
+        },
         "selection_reason": reason, "threshold_rule": "Maximize training OOF F2, ties: precision then threshold",
         "shap": shap_status,
         "sensitive_ablation": {"excluded": SENSITIVE_COLUMNS,
@@ -189,11 +231,11 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False) -> dict:
     result_text = markdown_results(report)
     (ROOT / "reports/results.md").write_text("# Executed experiment results\n\n" + result_text, encoding="utf-8")
     readme = ROOT / "README.md"
-    start, end = "<!-- RESULTS:START -->", "<!-- RESULTS:END -->"
-    contents = readme.read_text(encoding="utf-8") if readme.exists() else ""
-    if start in contents and end in contents:
-        before, after = contents.split(start, 1)[0], contents.split(end, 1)[1]
-        readme.write_text(before + start + "\n\n" + result_text + "\n" + end + after, encoding="utf-8")
+    if readme.exists():
+        contents = readme.read_text(encoding="utf-8")
+        updated = replace_results_block(contents, result_text)
+        if updated != contents:
+            readme.write_text(updated, encoding="utf-8")
     # One sample is enough for a reproducible local request; no raw request logging.
     example = X_train[FEATURE_COLUMNS].iloc[0].to_dict()
     save_json(example, ROOT / "examples/employee.json")

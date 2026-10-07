@@ -70,7 +70,13 @@ def explain_shap(pipeline, X_train, X_test, metrics_dir: Path, figures_dir: Path
                                    "mean_absolute_shap": np.abs(explanation.values).mean(axis=0)})
         importance.sort_values("mean_absolute_shap", ascending=False).to_csv(
             metrics_dir / "shap_importance.csv", index=False)
-        shap.plots.beeswarm(explanation, max_display=15, show=False)
+        # beeswarm jitters with NumPy's global state; seed it locally for a reproducible figure.
+        state = np.random.get_state()
+        np.random.seed(RANDOM_STATE)
+        try:
+            shap.plots.beeswarm(explanation, max_display=15, show=False)
+        finally:
+            np.random.set_state(state)
         save_figure(plt.gcf(), figures_dir / "shap_summary.png")
         shap.plots.waterfall(explanation[0], max_display=12, show=False)
         save_figure(plt.gcf(), figures_dir / "shap_individual.png")
