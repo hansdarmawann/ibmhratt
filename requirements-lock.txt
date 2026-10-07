@@ -15,6 +15,7 @@ cloudpickle==3.1.2
 colorama==0.4.6
 comm==0.2.3
 contourpy==1.4.0
+coverage==7.16.2
 cycler==0.12.1
 debugpy==1.8.22
 executing==2.2.1
@@ -64,12 +65,14 @@ pydantic_core==2.46.5
 pydeck==0.9.3
 pyparsing==3.3.3
 pytest==9.1.1
+pytest-cov==7.1.0
 python-dateutil==2.9.0.post0
 python-multipart==0.0.32
 pyzmq==27.2.0
 referencing==0.37.0
 requests==2.34.2
 rpds-py==2026.9.1
+ruff==0.16.10
 scikit-learn==1.8.0
 scipy==1.18.1
 shap==0.52.0

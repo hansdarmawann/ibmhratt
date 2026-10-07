@@ -14,6 +14,8 @@ Selected **logistic_regression** at threshold **0.20**, chosen by maximum F2 on 
 
 At the frozen operating threshold, holdout AP = **0.584**, ROC-AUC = **0.812**, precision = **0.423**, recall = **0.638**, F1 = **0.508**.
 
+95% stratified bootstrap intervals (1,000 holdout resamples, frozen model and threshold): AP [0.460, 0.711], ROC-AUC [0.734, 0.883], precision [0.333, 0.517], recall [0.489, 0.766], F1 [0.404, 0.607]. They reflect holdout sampling variability only, not split or model-selection variability.
+
 - True positives: 30 observed attrition cases flagged.
 - True negatives: 206 observed retention cases not flagged.
 - False positives: 41 observed retention cases flagged.

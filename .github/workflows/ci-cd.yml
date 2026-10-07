@@ -39,16 +39,28 @@ jobs:
           cache: pip
           cache-dependency-path: |
             requirements.txt
+            requirements-dev.txt
             requirements-explain.txt
             requirements-lock.txt
       - name: Install constrained dependencies
-        run: python -m pip install -r requirements-explain.txt -c requirements-lock.txt
+        run: python -m pip install -r requirements-dev.txt -r requirements-explain.txt -c requirements-lock.txt
       - name: Check dependency compatibility
         run: python -m pip check
-      - name: Run unit and integration tests
-        run: python -m pytest -q --junitxml=reports/test-results.xml
+      - name: Lint
+        run: python -m ruff check . --output-format=github
+      - name: Run unit and integration tests with coverage
+        run: >-
+          python -m pytest -q --junitxml=reports/test-results.xml
+          --cov --cov-report=term --cov-report=xml:reports/coverage.xml
       - name: Train from the canonical raw dataset
         run: python -m src.models.train --with-shap
+      - name: Check committed results match a fresh run
+        shell: bash
+        run: |
+          if ! git diff --exit-code -- README.md reports/results.md; then
+            echo "::error::Training changed README.md or reports/results.md. Retrain locally and commit the regenerated results."
+            exit 1
+          fi
       - name: Execute all notebooks
         run: python -m scripts.execute_notebooks
       - name: Verify artifacts and live services

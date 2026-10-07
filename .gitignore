@@ -15,3 +15,6 @@ data/processed/*
 !data/processed/.gitkeep
 .vscode/
 *.log
+coverage.xml
+reports/coverage.xml
+reports/test-results.xml
