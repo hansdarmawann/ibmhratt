@@ -1,3 +1,238 @@
-# ibmhratt
+# Employee Attrition ML
 
-https://www.kaggle.com/datasets/pavansubhasht/ibm-hr-analytics-attrition-dataset
+An end-to-end Python portfolio project that estimates employee attrition probabilities, compares interpretable and tree-based models, and serves the saved pipeline through FastAPI and Streamlit. Model selection and threshold tuning use training data; a reserved holdout provides final evaluation.
+
+**Educational analysis only. This project must not be used as an automated system for firing, promotion, hiring, disciplinary action, or other high-impact employment decisions.** Outputs are analytical signals, not causal evidence or reliable forecasts for individuals.
+
+## Business problem
+
+Can available employee attributes distinguish observed attrition from retention? Which attributes contribute most to those model predictions? The workflow illustrates how an analyst might study retention-related patterns while recognizing uncertainty, sensitive attributes, and the costs of false positives and false negatives.
+
+## Dataset
+
+The supplied `WA_Fn-UseC_-HR-Employee-Attrition.csv` has 1,470 rows and 35 columns. Its target is `Attrition`: **Yes = 1**, **No = 0**. There are 237 Yes records and 1,233 No records (16.1% versus 83.9%). The [dataset publisher describes it as fictional data created by IBM data scientists](https://www.kaggle.com/datasets/pavansubhasht/ibm-hr-analytics-attrition-dataset). It does not establish real-world HR performance or a prediction horizon.
+
+The original root CSV is preserved; `data/raw/` contains a byte-identical working copy. Loading validates all 35 columns, target labels, types, bounds, categories, duplicate rows/IDs, and constant assumptions. Missing predictors are reported and imputed within training folds; missing targets or entirely missing predictor columns fail clearly. The provided file contains no missing values or duplicate rows.
+
+| Excluded feature | Reason confirmed on training rows |
+|---|---|
+| `EmployeeCount` | Constant 1 |
+| `Over18` | Constant Y |
+| `StandardHours` | Constant 80 |
+| `EmployeeNumber` | Unique identifier, without portable predictive meaning |
+
+The remaining 30 predictors are documented in `src/config.py`. Numeric bounds express broad schema constraints, not fitted dataset extrema. Ordinal ratings are treated numerically; the equal-spacing assumption is a limitation.
+
+## Project architecture
+
+```mermaid
+flowchart TD
+    A[Raw CSV] --> B[Schema validation]
+    B --> C[Stratified 80/20 split]
+    C --> D[Training-only EDA]
+    D --> E[Five-fold CV: preprocessing plus model]
+    E --> F[Select model by training average precision]
+    F --> G[Choose threshold using training OOF F2]
+    G --> H[Freeze model choice and threshold]
+    C --> I[Reserved holdout]
+    H --> J[Final evaluation and explanations]
+    I --> J
+    H --> K[Fit selected pipeline on training partition]
+    K --> L[Joblib pipeline with threshold metadata]
+    L --> M[FastAPI]
+    L --> N[Streamlit]
+```
+
+`Pipeline` contains missing-value normalization, a `ColumnTransformer`, and the estimator. Numeric values use median imputation and scaling for logistic regression. Categorical values use most-frequent imputation and `OneHotEncoder(handle_unknown="ignore")`. Every CV fold independently fits all learned transforms. The holdout is never used to fit preprocessors, select features, choose a model, or tune the threshold.
+
+## Repository structure
+
+```text
+ibmhratt/
+├── data/{raw,processed}/        # Original copy and reproducible split/OOF manifests
+├── notebooks/                  # Four executed narrative exploration notebooks
+├── src/
+│   ├── config.py               # Paths, schema, seed, and shared settings
+│   ├── data/                   # Loading, validation, training-only EDA
+│   ├── features/preprocess.py  # Fold-fitted transformations
+│   ├── models/                # Train, evaluate, threshold, explain, predict
+│   └── visualization/         # Headless report figures
+├── app/{api,streamlit_app}.py
+├── models/                     # Regenerated pipeline and metadata; gitignored
+├── reports/{figures,metrics}/  # Actual computed evidence, intended for Git
+├── reports/results.md
+├── examples/employee.json     # Complete sample API payload
+├── scripts/                    # Notebook generation/execution
+├── tests/                      # Data, leakage boundary, inference, API, UI
+├── environment.yml
+├── requirements.txt
+├── requirements-explain.txt    # Optional SHAP dependency
+├── requirements-lock.txt       # Exact package constraints from verified Conda run
+├── Dockerfile
+└── Makefile
+```
+
+## Installation: Conda `ibmhratt`
+
+Run commands from the repository root. Python **3.12** is the verified runtime.
+
+```bash
+# Only if the environment does not already exist:
+conda create -n ibmhratt python=3.12 pip -y
+conda activate ibmhratt
+python -m pip install -r requirements.txt -c requirements-lock.txt
+python -m src.models.train
+python -m pytest -q
+```
+
+Alternatively, `conda env create -f environment.yml` creates the named environment. `requirements.txt` declares supported ranges; the lock file pins the packages used for the recorded results. Use the constraints above when reproducing them. Platforms may install different platform-specific transitive dependencies.
+
+If activation is inconvenient, use `conda run --no-capture-output -n ibmhratt python -m src.models.train`. In VS Code, select **Python (ibmhratt)** as the interpreter and notebook kernel. All project paths are derived from `src/config.py`, without machine-specific absolute paths.
+
+Optional SHAP and executed notebooks:
+
+```bash
+python -m pip install -r requirements-explain.txt -c requirements-lock.txt
+python -m src.models.train --with-shap
+python -m scripts.execute_notebooks
+```
+
+The four notebooks cover data understanding, EDA, feature engineering, and model experiments. Training must run first because notebooks display its generated figures and metrics. Reusable logic lives in `src/`; `scripts/build_notebooks.py` regenerates notebook cell sources and clears their outputs.
+
+## EDA highlights
+
+EDA uses only the 1,176 training rows. The saved tables cover every predictor: category counts/rates, numeric summary statistics by target, missingness, IQR outlier counts, and numerical correlations. Overtime groups show different observed attrition rates; this is an association and does not show that overtime causes a departure. Income, job level, and career tenure variables overlap; a separate training-CV ablation investigates dropping `JobLevel`, `YearsInCurrentRole`, and `YearsWithCurrManager`.
+
+Outliers are inspected rather than automatically trimmed. High income can correspond to senior roles, and IQR flags on bounded ratings are not evidence of data errors. No correlated variables are removed from the main candidates without a prespecified comparison.
+
+![Training categorical associations](reports/figures/categorical_attrition.png)
+
+## Modeling approach and evaluation
+
+The fixed split and all applicable estimators use seed **42**. Five shuffled stratified folds compare a prior-based `DummyClassifier`, unweighted and balanced logistic regression, a constrained balanced random forest, and regularized histogram gradient boosting. No SMOTE or XGBoost dependency is required.
+
+The primary comparison is **average precision (AP)**, labeled `pr_auc` in JSON. AP is a weighted summary of precision over recall increments, not trapezoidal area under the PR curve. Precision, positive-class recall, F1, ROC-AUC, confusion counts, and Brier score are also recorded. CV reports means and population standard deviations for AP, ROC-AUC, precision, recall, and F1. Accuracy is not a selection criterion.
+
+The prespecified selection rule chooses the highest training CV AP, preferring unweighted logistic regression, then balanced logistic regression, if within 0.01 AP of the best candidate. This makes the interpretability/complexity tradeoff explicit. The diagnostic sensitive/correlated-feature ablations do not become additional candidates. Test results never change the rule.
+
+## Model comparison: executed results
+
+This block is regenerated by the training CLI from actual metrics. Full details are in [model_metrics.json](reports/metrics/model_metrics.json), [fold-level metrics](reports/metrics/cv_fold_metrics.csv), and [results.md](reports/results.md).
+
+<!-- RESULTS:START -->
+
+| Model | CV AP (mean ± SD) | Test AP | Test ROC-AUC | Precision | Recall | F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| dummy | 0.162 ± 0.000 | 0.160 | 0.500 | 0.000 | 0.000 | 0.000 |
+| logistic_regression | 0.651 ± 0.061 | 0.584 | 0.812 | 0.615 | 0.340 | 0.438 |
+| logistic_balanced | 0.606 ± 0.082 | 0.561 | 0.803 | 0.349 | 0.638 | 0.451 |
+| random_forest | 0.552 ± 0.058 | 0.436 | 0.789 | 0.524 | 0.468 | 0.494 |
+| hist_gradient_boosting | 0.604 ± 0.045 | 0.542 | 0.796 | 0.786 | 0.234 | 0.361 |
+
+Table classification metrics use threshold 0.50. AP is average precision, not trapezoidal PR area.
+
+Selected **logistic_regression** at threshold **0.20**, chosen by maximum F2 on training out-of-fold predictions.
+
+At the frozen operating threshold, holdout AP = **0.584**, ROC-AUC = **0.812**, precision = **0.423**, recall = **0.638**, F1 = **0.508**.
+
+- True positives: 30 observed attrition cases flagged.
+- True negatives: 206 observed retention cases not flagged.
+- False positives: 41 observed retention cases flagged.
+- False negatives: 17 observed attrition cases missed.
+
+Selection uses only five-fold training average precision. Prefer unweighted, then balanced logistic regression when within 0.01 AP of the best non-dummy model, for interpretability and simpler operation. Otherwise use the highest mean AP. Best AP candidate: logistic_regression; selected: logistic_regression. This rule was fixed before holdout evaluation.
+
+OOF threshold scores reuse the training folds used for model comparison and are selection diagnostics, not an unbiased performance estimate. The holdout is evaluated after choices are frozen. There are 47 positive holdout examples, so small count changes materially affect recall.
+
+<!-- RESULTS:END -->
+
+![Holdout PR curves](reports/figures/precision_recall_curve.png)
+
+## Threshold selection
+
+The selected model generates training out-of-fold probabilities with the same five stratified folds. A grid from 0.05 through 0.95 includes all requested 0.20–0.50 operating points. The selected threshold maximizes **F2**, breaking ties by precision and then the higher threshold. [threshold_analysis.csv](reports/metrics/threshold_analysis.csv) includes precision, recall, F1/F2, false positives, and false negatives for every point.
+
+F2 expresses an educational preference for recall; it is not an estimated dollar cost. A missed support opportunity could matter more than an unnecessary outreach, but that needs an agreed intervention policy and capacity constraints. A lower threshold increases the number of flagged records. The API and dashboard use the threshold bundled with the model, rather than defaulting to 0.50.
+
+OOF threshold scores reuse the training folds used for model selection and can be optimistic. Final holdout metrics are reported separately. The saved pipeline remains fitted only on the training partition, preserving correspondence between the evaluated model and deployed demo.
+
+## Explainability
+
+The report includes human-readable logistic coefficients, random-forest impurity importance, and original-feature permutation importance measured as holdout AP decrease over ten shuffles. Numeric logistic coefficients represent a one-training-standard-deviation change; categorical coefficients act on encoded indicators. Full one-hot encoding and correlated predictors require cautious interpretation of individual coefficients.
+
+Optional SHAP generates global importance, a beeswarm summary, and a waterfall for the first holdout record. Logistic SHAP contributions are in **log-odds**, not additive probability points; applying the logistic function to base value plus contributions recovers the model probability. SHAP uses a training background and at most 60 holdout examples. The dashboard clearly separates this stored explanation from its interactive profile form.
+
+These explanations describe associations contributing to model predictions. Correlated features can share or mask importance. SHAP failure is isolated and recorded in the report; the core workflow retains coefficient and permutation explanations.
+
+## Responsible AI considerations
+
+Gender, Age, and MaritalStatus are retained in the educational main comparison. A prespecified logistic regression ablation removes all three and reports training CV metrics; its AP difference is in `sensitive_ablation` in the JSON report. This does **not** establish whether those attributes are acceptable for an actual HR application.
+
+[Subgroup metrics](reports/metrics/subgroup_metrics.csv) report sample counts, positive counts, recall, false-positive rate, precision, and selection rate by Gender, MaritalStatus, and AgeBand. Small subgroups produce uncertain estimates; no confidence intervals or formal fairness certification are claimed. Excluding sensitive attributes alone cannot eliminate proxies such as job role, compensation, and tenure.
+
+Real use would require a support-oriented purpose, consent/privacy controls, a governance review, human oversight, appropriate fairness definitions, independent validation, and monitoring. No real employee data should be entered into this demo. Model signals must not determine high-impact employment actions.
+
+## API usage
+
+```bash
+python -m uvicorn app.api:app --host 127.0.0.1 --port 8000
+```
+
+Visit `http://127.0.0.1:8000/docs` for the complete Pydantic/OpenAPI schema. `GET /` describes the service; `GET /health` returns status and model availability, with HTTP 503 if the artifact cannot load. `POST /predict` accepts a single employee object with all 30 predictor keys. Numeric fields are strict whole numbers with bounds; categories are nonempty strings. Fields can explicitly be null for imputation, but missing or extra keys fail with HTTP 422. Novel categories are accepted and encoded as unseen values; they may reduce reliability.
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" --data-binary @examples/employee.json
+```
+
+PowerShell equivalent:
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -ContentType 'application/json' -Body (Get-Content examples/employee.json -Raw)
+```
+
+Responses contain `prediction` (Yes/No), `attrition_probability`, and `threshold`, populated from the actual model. No mock probabilities are served. The Python module accepts a dictionary or DataFrame and returns `predicted_class`, `attrition_probability`, and `decision_threshold`; a DataFrame yields a list in row order.
+
+```bash
+python -m src.models.predict examples/employee.json
+```
+
+The model loads once during API startup; restart after retraining. Requests log event/count information without raw profiles. Joblib artifacts must come from a trusted source because pickle-based loading can execute code. This local demo does not implement authentication or production access controls.
+
+## Streamlit usage
+
+```bash
+python -m streamlit run app/streamlit_app.py
+```
+
+Open `http://localhost:8501`. Tabs cover project/dataset overview, training-only EDA, model performance, an editable prediction form, feature importance, model explanation, and responsible ML. The form displays estimated probability first, its threshold-derived class, and the frozen operating threshold. Resources refresh when the artifact changes.
+
+## Docker usage
+
+```bash
+docker build -t employee-attrition-ml .
+docker run --rm -p 127.0.0.1:8000:8000 employee-attrition-ml
+```
+
+The Python 3.12 slim image installs constrained dependencies and trains the model inside the image, avoiding dependence on an uncommitted local artifact or cross-version pickle. The final service runs as an unprivileged user and includes a health check. Building requires a running Linux-container Docker engine and dependency-download access. SHAP is optional and omitted from the default image build.
+
+## Testing and reproducibility
+
+```bash
+python -m pytest -q
+python -m scripts.execute_notebooks
+python -m scripts.verify_delivery
+```
+
+Tests cover loading/schema failures, raw-file integrity, disjoint stratified partitions, train-only imputation statistics, unknown categories/nulls, dictionary/batch prediction, serialization parity, stored threshold use, known confusion counts, API validation and unavailable-model behavior, and an automated Streamlit form submission. Test fixtures train a small real pipeline; tests do not require a pretrained production artifact or manual interaction.
+
+After training and notebook execution, `scripts.verify_delivery` also checks the delivered artifact against its recorded metrics, OOF coverage, SHAP additivity, executed notebook cells, and actual loopback HTTP startup/prediction for both services. Its temporary servers are stopped automatically.
+
+`make install`, `make train`, `make explain`, `make test`, `make api`, `make app`, and `make notebooks` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
+
+Model binaries and generated split/OOF CSVs are gitignored because they are reproducible outputs. Source, raw data, executed notebooks, metrics, and figures are intended for Git. `models/.gitkeep` and `data/processed/.gitkeep` preserve their folders. Model metadata records the raw CSV SHA-256, package/Python versions, seed, features, row counts, and threshold. No Git commit or remote deployment is required to run locally.
+
+## Limitations and future improvements
+
+This is a small fictional, cross-sectional dataset with no temporal validation or guaranteed feature availability before an attrition event. The structural leakage safeguards do not prove absence of real-world look-ahead bias. Only one holdout split is used; CV variability is reported, and holdout metrics can fluctuate. Scores are uncalibrated probability estimates, particularly for class-weighted models. Ordinal spacing and broad schema bounds are modeling assumptions.
+
+Future work includes nested/repeated CV, constrained hyperparameter search, independent calibration, subgroup uncertainty and fairness metrics, temporal/external validation, feature/data drift monitoring, MLflow experiment tracking, DVC data versioning, CI/CD, governed cloud deployment, privacy-preserving database-backed inference logging, and monitored scheduled retraining. These require evidence and a defined operating purpose before adding infrastructure.
