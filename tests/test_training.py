@@ -6,7 +6,7 @@ import pytest
 
 from src.models.evaluate import BOOTSTRAP_METRICS, bootstrap_intervals, subgroup_metrics
 from src.models.threshold import select_threshold
-from src.models.train import RESULTS_END, RESULTS_START, replace_results_block, select_model
+from src.models.train import RESULTS_END, RESULTS_START, replace_export, replace_results_block, select_model
 
 
 def summaries(**ap):
@@ -72,3 +72,17 @@ def test_bootstrap_intervals_are_deterministic_and_bracket_estimates():
     assert (first["estimate"] <= first["upper"]).all()
     with pytest.raises(ValueError, match="both classes"):
         bootstrap_intervals(np.zeros(5), np.full(5, 0.1), 0.5, n_boot=10)
+
+
+def test_replace_export_removes_files_from_earlier_runs(tmp_path):
+    source, destination = tmp_path / "run", tmp_path / "export"
+    (source / "nested").mkdir(parents=True)
+    (source / "metrics.csv").write_text("new", encoding="utf-8")
+    (source / "nested/table.csv").write_text("nested", encoding="utf-8")
+    (destination / "old_dir").mkdir(parents=True)
+    for name in ["shap_importance.csv", "metrics.csv", ".gitkeep", "old_dir/stale.csv"]:
+        (destination / name).write_text("old", encoding="utf-8")
+    replace_export(source, destination)
+    files = {p.relative_to(destination).as_posix() for p in destination.rglob("*") if p.is_file()}
+    assert files == {".gitkeep", "metrics.csv", "nested/table.csv"}
+    assert (destination / "metrics.csv").read_text(encoding="utf-8") == "new"
