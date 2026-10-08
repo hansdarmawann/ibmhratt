@@ -13,6 +13,14 @@ def test_json_differences_tolerate_float_noise_only():
     assert json_differences(old, {k: v for k, v in old.items() if k != "nested"}) == ["/: keys differ"]
 
 
+def test_json_differences_ignore_machine_details_but_not_results():
+    old = {"python_version": "3.12.15", "data_sha256": "a5c3", "package_versions": {"numpy": "2.5.3"}}
+    assert json_differences(old, {**old, "python_version": "3.12.10"}) == []
+    assert json_differences(old, {**old, "data_sha256": "e9f5"}) == ["/data_sha256: 'a5c3' != 'e9f5'"]
+    assert json_differences(old, {**old, "package_versions": {"numpy": "2.6.0"}}) == [
+        "/package_versions/numpy: '2.5.3' != '2.6.0'"]
+
+
 def test_csv_differences_compare_numbers_with_tolerance():
     old = pd.DataFrame({"metric": ["ap", "f1"], "value": [0.5, None]})
     assert csv_differences(old, old.assign(value=[0.5 + 1e-12, None])) == []

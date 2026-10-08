@@ -19,6 +19,9 @@ from src.config import ROOT
 
 REPORT_DIRS = ["reports/metrics", "reports/figures"]
 RTOL, ATOL = 1e-6, 1e-9
+# Describes the machine, not the result: patch releases differ across runners.
+# Package versions are still compared because requirements-lock.txt pins them.
+ENVIRONMENT_KEYS = {"python_version"}
 
 
 def git(*args: str) -> bytes:
@@ -38,7 +41,8 @@ def json_differences(old, new, where: str = "") -> list[str]:
     if isinstance(old, dict) and isinstance(new, dict):
         if old.keys() != new.keys():
             return [f"{where or '/'}: keys differ"]
-        return [d for key in old for d in json_differences(old[key], new[key], f"{where}/{key}")]
+        return [d for key in old if key not in ENVIRONMENT_KEYS
+                for d in json_differences(old[key], new[key], f"{where}/{key}")]
     if isinstance(old, list) and isinstance(new, list):
         if len(old) != len(new):
             return [f"{where or '/'}: lengths differ"]

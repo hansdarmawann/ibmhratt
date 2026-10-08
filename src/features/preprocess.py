@@ -20,9 +20,8 @@ def feature_exclusions(X_train: pd.DataFrame) -> dict[str, str]:
     """Confirm dataset-specific constants on training rows before excluding."""
     reasons = {ID_COLUMN: "Unique employee identifier; no portable predictive meaning."}
     for col, expected in CONSTANT_COLUMNS.items():
-        if col in X_train:
-            if X_train[col].nunique(dropna=False) != 1 or not X_train[col].eq(expected).all():
-                raise ValueError(f"Expected {col} to be constant {expected!r} in training data.")
+        if col in X_train and (X_train[col].nunique(dropna=False) != 1 or not X_train[col].eq(expected).all()):
+            raise ValueError(f"Expected {col} to be constant {expected!r} in training data.")
         reasons[col] = f"Confirmed constant in training data ({expected!r}); no variation."
     return reasons
 
