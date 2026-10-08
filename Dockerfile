@@ -1,4 +1,5 @@
-FROM python:3.12-slim AS builder
+# Pinned by digest for reproducible builds; Dependabot proposes digest updates.
+FROM python:3.12-slim@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -15,7 +16,7 @@ COPY README.md ./README.md
 RUN python -m attrition.models.train
 RUN python -c "from attrition.models.artifacts import load_bundle; load_bundle()"
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MPLCONFIGDIR=/tmp/matplotlib \
