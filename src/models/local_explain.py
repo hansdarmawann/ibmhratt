@@ -10,6 +10,12 @@ from src.models.predict import predict
 LOGGER = logging.getLogger(__name__)
 
 
+def check_additive(reconstructed, expected) -> None:
+    """Base value plus contributions must reproduce the model output."""
+    if not np.allclose(reconstructed, expected, rtol=1e-5, atol=1e-6):
+        raise ValueError("Explanation contributions do not reconstruct the model output.")
+
+
 def shap_values(pipeline, background: pd.DataFrame, profiles: pd.DataFrame):
     """Return additive SHAP values with explicit positive-class output units."""
     import shap
@@ -32,7 +38,7 @@ def shap_values(pipeline, background: pd.DataFrame, profiles: pd.DataFrame):
     if explanation.values.ndim == 3:
         explanation = explanation[:, :, 1]
     totals = np.asarray(explanation.base_values).reshape(-1) + explanation.values.sum(axis=1)
-    np.testing.assert_allclose(totals, expected, rtol=1e-5, atol=1e-6)
+    check_additive(totals, expected)
     return explanation, units, samples
 
 
@@ -63,7 +69,7 @@ def explain_profile(pipeline, profile: dict, background: pd.DataFrame) -> dict:
         grouped = grouped.reindex(grouped.abs().sort_values(ascending=False, kind="stable").index)
         base = float(np.asarray(explanation.base_values).reshape(-1)[0])
         probability = explained_probability(base, float(grouped.sum()), units)
-        np.testing.assert_allclose(probability, result["attrition_probability"], rtol=1e-5, atol=1e-6)
+        check_additive(probability, result["attrition_probability"])
         return {"status": "generated", "units": units, "base_value": base,
                 "probability": result["attrition_probability"], "run_id": result["run_id"],
                 "contribution_sum": float(grouped.sum()), "other_contribution": float(grouped.iloc[10:].sum()),

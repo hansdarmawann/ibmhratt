@@ -66,6 +66,8 @@ jobs:
             echo "::error::Training changed README.md or reports/results.md. Retrain locally and commit the regenerated results."
             exit 1
           fi
+      - name: Check committed metrics and figures match a fresh run
+        run: python -m scripts.compare_reports
       - name: Execute all notebooks
         run: python -m scripts.execute_notebooks
       - name: Verify artifacts and live services

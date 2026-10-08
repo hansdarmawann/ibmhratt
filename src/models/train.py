@@ -152,6 +152,19 @@ def replace_results_block(contents: str, result_text: str) -> str:
     return before + RESULTS_START + "\n\n" + result_text + "\n" + RESULTS_END + after
 
 
+def replace_export(source: Path, destination: Path) -> None:
+    """Mirror one run directory so outputs from earlier runs, such as SHAP files, cannot linger."""
+    destination.mkdir(parents=True, exist_ok=True)
+    for path in destination.iterdir():
+        if path.name == ".gitkeep":
+            continue
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    shutil.copytree(source, destination, dirs_exist_ok=True)
+
+
 def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: Path = ROOT) -> dict:
     """Run the complete experiment and save a full preprocessing/model pipeline."""
     run_id = str(uuid4())
@@ -271,29 +284,29 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
     save_json(report, metrics_dir / "model_metrics.json")
     result_text = markdown_results(report)
     (run_dir / "results.md").write_text("# Executed experiment results\n\n" + result_text, encoding="utf-8")
-    readme = output_root / "README.md"
-    if readme.exists():
-        contents = readme.read_text(encoding="utf-8")
-        updated = replace_results_block(contents, result_text)
-        if updated != contents:
-            readme.write_text(updated, encoding="utf-8")
     # One sample is enough for a reproducible local request; no raw request logging.
     example = X_train[FEATURE_COLUMNS].iloc[0].to_dict()
     save_json(example, run_dir / "employee.json")
     background = X_train[FEATURE_COLUMNS].sample(min(100, len(X_train)), random_state=RANDOM_STATE)
     save_json(json.loads(background.to_json(orient="records")), run_dir / "background.json")
     seal_bundle(run_dir)
-    # Git exports are snapshots only. Serving always reads the immutable bundle.
+    publish_bundle(run_dir, output_root / "models/current.json")
+    LOGGER.info("Validated run %s is now active", run_id)
+    # Git exports are snapshots of the active run only. Serving always reads the immutable bundle.
     for source, destination in [(metrics_dir, output_root / "reports/metrics"),
                                 (figures_dir, output_root / "reports/figures"),
                                 (processed_dir, output_root / "data/processed")]:
-        shutil.copytree(source, destination, dirs_exist_ok=True)
+        replace_export(source, destination)
     export_report = {key: value for key, value in report.items() if key != "run_id"}
     save_json(export_report, output_root / "reports/metrics/model_metrics.json")
     shutil.copyfile(run_dir / "results.md", output_root / "reports/results.md")
     save_json(example, output_root / "examples/employee.json")
-    publish_bundle(run_dir, output_root / "models/current.json")
-    LOGGER.info("Validated run %s is now active", run_id)
+    readme = output_root / "README.md"
+    if readme.exists():
+        contents = readme.read_text(encoding="utf-8")
+        updated = replace_results_block(contents, result_text)
+        if updated != contents:
+            readme.write_text(updated, encoding="utf-8")
     LOGGER.info("Model training completed: AP %.3f; recall %.3f; F1 %.3f",
                 selected_metrics["pr_auc"], selected_metrics["recall"], selected_metrics["f1"])
     return report
