@@ -116,12 +116,17 @@ def main() -> None:
                                          headers={"Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(request, timeout=10) as response:
             prediction = json.load(response)
+            assert response.headers["X-Request-ID"]
+        with urllib.request.urlopen(base_url + "/model", timeout=10) as response:
+            info = json.load(response)
+        assert info["run_id"] == bundle.run_id
+        assert info["decision_threshold"] == bundle.report["selected_threshold"]
         expected = predict(example, pipeline=pipeline)
         np.testing.assert_allclose(prediction["attrition_probability"], expected["attrition_probability"])
         assert prediction["prediction"] == expected["predicted_class"]
         assert prediction["threshold"] == expected["decision_threshold"]
         assert prediction["run_id"] == bundle.run_id
-    LOGGER.info("Live FastAPI /health and /predict verified against saved pipeline")
+    LOGGER.info("Live FastAPI /health, /model, and /predict verified against saved pipeline")
     with local_service(["streamlit", "run", "app/streamlit_app.py", "--server.address=127.0.0.1",
                         "--server.port={port}", "--server.headless=true", "--browser.gatherUsageStats=false"],
                        "/_stcore/health") as base_url, urllib.request.urlopen(base_url, timeout=10) as response:
