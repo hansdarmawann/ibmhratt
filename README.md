@@ -79,11 +79,12 @@ ibmhratt/
 ├── tests/                      # Data, leakage boundary, inference, API, UI
 ├── environment.yml
 ├── requirements.txt            # Training dependencies; includes requirements-serving.txt
-├── requirements-dev.txt        # Runtime plus tests, coverage, lint, notebook execution
+├── requirements-dev.txt        # Runtime plus tests, coverage, lint, type checking, notebook execution
 ├── requirements-explain.txt    # Optional SHAP dependency
 ├── requirements-lock.txt       # Exact package constraints from verified Conda run
 ├── Dockerfile
-├── pyproject.toml              # Ruff, pytest, and coverage settings
+├── pyproject.toml              # Ruff, mypy, pytest, and coverage settings
+├── .pre-commit-config.yaml     # Optional local Ruff, mypy, and file hygiene hooks
 └── Makefile
 ```
 
@@ -243,6 +244,7 @@ The multi-stage Python 3.12 slim image trains and verifies a bundle in its build
 
 ```bash
 python -m ruff check .
+python -m mypy
 python -m pytest -q --cov --cov-report=term --cov-fail-under=0
 python -m scripts.execute_notebooks
 python -m scripts.verify_delivery
@@ -252,7 +254,9 @@ The pytest suite includes unit tests and integration tests. Tests cover loading/
 
 After training and notebook execution, `scripts.verify_delivery` also checks the delivered artifact against its recorded metrics and bootstrap point estimates, OOF coverage, SHAP additivity, executed notebook cells, and actual loopback HTTP startup/prediction for both services. Its temporary servers are stopped automatically.
 
-`make install`, `make train`, `make explain`, `make lint`, `make test`, `make coverage`, `make check`, `make api`, `make app`, and `make notebooks` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
+`make install`, `make train`, `make explain`, `make lint`, `make typecheck`, `make test`, `make coverage`, `make check`, `make api`, `make app`, and `make notebooks` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
+
+Optional Git hooks run Ruff, mypy, and basic file checks before each commit, using the activated environment's pinned tools: `python -m pip install pre-commit`, then `pre-commit install`. Generated reports and notebooks are excluded; CI compares them with a fresh run instead.
 
 Model binaries and generated split/OOF CSVs are gitignored because they are reproducible outputs. Source, raw data, executed notebooks, metrics, and figures are intended for Git. `models/.gitkeep` and `data/processed/.gitkeep` preserve their folders. Model metadata records the raw CSV SHA-256, package/Python versions, seed, features, row counts, and threshold. No Git commit or remote deployment is required to run locally.
 
@@ -260,7 +264,7 @@ Model binaries and generated split/OOF CSVs are gitignored because they are repr
 
 [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) runs on pull requests, pushes to `main`, version tags matching `v*`, and manual dispatch.
 
-- **CI:** Python 3.12 on Ubuntu and Windows, constrained dependency installation, `pip check`, Ruff lint, all pytest tests with coverage, fresh training with SHAP measured in the same coverage database, a combined 80% coverage gate, a check that the committed README and `reports/results.md` match the fresh run, a tolerant comparison of every committed metrics file and figure name (`python -m scripts.compare_reports`), notebook execution, and delivery verification including live API/dashboard startup. Test results and generated model/report artifacts are retained for 14 days.
+- **CI:** Python 3.12 on Ubuntu and Windows, constrained dependency installation, `pip check`, Ruff lint, mypy type checking, all pytest tests with coverage, fresh training with SHAP measured in the same coverage database, a combined 80% coverage gate, a check that the committed README and `reports/results.md` match the fresh run, a tolerant comparison of every committed metrics file and figure name (`python -m scripts.compare_reports`), notebook execution, and delivery verification including live API/dashboard startup. Test results and generated model/report artifacts are retained for 14 days.
 - **Container validation:** after both CI jobs pass, build the Docker image and test its real `/health` and `/predict` endpoints. Pull requests and manual runs build and test without publishing.
 - **CD (continuous delivery):** after container validation passes on a push to `main` or a `v*` tag, publish that same tested image to `ghcr.io/<owner>/<repository>`. Main publishes `latest` and a commit SHA tag; version tags publish the Git tag and a commit SHA tag. This delivers a container image; running it on a server is a separate deployment step.
 
@@ -300,7 +304,7 @@ python -m pip install -r requirements-dev.txt -r requirements-explain.txt -c req
 python -m scripts.check
 ```
 
-This runs lint, all tests, fresh training, combined coverage (minimum 80%), notebook regeneration/execution, and live service verification. Tests alone can report lower coverage because training and plotting are exercised by the separate integration run. Temporary files and the coverage database use a unique directory under `.test-tmp/`; reports and notebooks are regenerated. In a restricted Windows sandbox, pytest's private-directory ACLs may require running this command with the sandbox's approved execution access. No assertions are skipped to work around permissions.
+This runs lint, type checking, all tests, fresh training, combined coverage (minimum 80%), notebook regeneration/execution, and live service verification. Tests alone can report lower coverage because training and plotting are exercised by the separate integration run. Temporary files and the coverage database use a unique directory under `.test-tmp/`; reports and notebooks are regenerated. In a restricted Windows sandbox, pytest's private-directory ACLs may require running this command with the sandbox's approved execution access. No assertions are skipped to work around permissions.
 
 ## Limitations and future improvements
 

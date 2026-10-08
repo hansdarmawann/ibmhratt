@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-.PHONY: install train explain lint test coverage check api app notebooks
+.PHONY: install train explain lint typecheck test coverage check api app notebooks
 install:
 	$(PYTHON) -m pip install -r requirements-dev.txt -c requirements-lock.txt
 train:
@@ -10,6 +10,8 @@ explain:
 	$(PYTHON) -m src.models.train --with-shap
 lint:
 	$(PYTHON) -m ruff check .
+typecheck:
+	$(PYTHON) -m mypy
 test:
 	$(PYTHON) -m pytest -q
 coverage:

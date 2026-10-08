@@ -20,6 +20,7 @@ def main() -> None:
            "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
     commands = [
         ["ruff", "check", "."],
+        ["mypy"],
         ["pytest", "-q", "--cov", "--cov-report=", "--cov-fail-under=0",
          "--basetemp", str(directory / "pytest"), "-o", f"cache_dir={directory / 'cache'}",
          "--junitxml=reports/test-results.xml"],
