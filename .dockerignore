@@ -8,3 +8,8 @@ __pycache__
 *.log
 notebooks
 tests
+models
+reports
+.test-tmp
+.coverage
+.ruff_cache

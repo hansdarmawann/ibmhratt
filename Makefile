@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-.PHONY: install train explain lint test coverage api app notebooks
+.PHONY: install train explain lint test coverage check api app notebooks
 install:
 	$(PYTHON) -m pip install -r requirements-dev.txt -c requirements-lock.txt
 train:
@@ -13,7 +13,9 @@ lint:
 test:
 	$(PYTHON) -m pytest -q
 coverage:
-	$(PYTHON) -m pytest -q --cov --cov-report=term
+	$(PYTHON) -m pytest -q --cov --cov-report=term --cov-fail-under=0
+check:
+	$(PYTHON) -m scripts.check
 api:
 	$(PYTHON) -m uvicorn app.api:app --host 127.0.0.1 --port 8000
 app:

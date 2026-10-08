@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "selected_model": "logistic_regression",
   "decision_threshold": 0.2,
   "feature_columns": [
@@ -360,6 +360,89 @@
       ]
     ]
   },
+  "calibration_diagnostics": [
+    {
+      "method": "uncalibrated",
+      "brier_score": 0.09037630987092406,
+      "log_loss": 0.321141009002774
+    },
+    {
+      "method": "sigmoid",
+      "brier_score": 0.09342806212582577,
+      "log_loss": 0.32124212168493993
+    }
+  ],
+  "stability_diagnostics": {
+    "selection_counts": {
+      "logistic_regression": 3
+    },
+    "threshold_min": 0.15,
+    "threshold_max": 0.2,
+    "threshold_std": 0.023570226039551594,
+    "main_seed": 42
+  },
+  "capacity_metrics": [
+    {
+      "partition": "training_oof",
+      "capacity_fraction": 0.05,
+      "selected_count": 59,
+      "positive_count": 190,
+      "true_positives": 51,
+      "precision": 0.864406779661017,
+      "recall": 0.26842105263157895,
+      "lift": 5.350223015165031
+    },
+    {
+      "partition": "training_oof",
+      "capacity_fraction": 0.1,
+      "selected_count": 118,
+      "positive_count": 190,
+      "true_positives": 90,
+      "precision": 0.7627118644067796,
+      "recall": 0.47368421052631576,
+      "lift": 4.720785013380909
+    },
+    {
+      "partition": "training_oof",
+      "capacity_fraction": 0.2,
+      "selected_count": 236,
+      "positive_count": 190,
+      "true_positives": 122,
+      "precision": 0.5169491525423728,
+      "recall": 0.6421052631578947,
+      "lift": 3.1996431757359494
+    },
+    {
+      "partition": "holdout",
+      "capacity_fraction": 0.05,
+      "selected_count": 15,
+      "positive_count": 47,
+      "true_positives": 12,
+      "precision": 0.8,
+      "recall": 0.2553191489361702,
+      "lift": 5.004255319148936
+    },
+    {
+      "partition": "holdout",
+      "capacity_fraction": 0.1,
+      "selected_count": 30,
+      "positive_count": 47,
+      "true_positives": 19,
+      "precision": 0.6333333333333333,
+      "recall": 0.40425531914893614,
+      "lift": 3.961702127659574
+    },
+    {
+      "partition": "holdout",
+      "capacity_fraction": 0.2,
+      "selected_count": 59,
+      "positive_count": 47,
+      "true_positives": 29,
+      "precision": 0.4915254237288136,
+      "recall": 0.6170212765957447,
+      "lift": 3.0746483952398123
+    }
+  ],
   "selected_model_ci": {
     "method": "stratified percentile bootstrap of the holdout; model and threshold frozen",
     "confidence": 0.95,

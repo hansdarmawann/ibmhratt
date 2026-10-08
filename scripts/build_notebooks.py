@@ -175,6 +175,21 @@ def main() -> None:
          "if report['shap']['status'] == 'generated':\n"
          "    display(Image(filename=str(FIGURES_DIR / 'shap_summary.png')))\n"
          "    display(Image(filename=str(FIGURES_DIR / 'shap_individual.png')))"),
+        ("md", "## Calibration, stability, and capacity\n\nCalibration compares unchanged predictions with sigmoid "
+         "calibration using five outer training folds and three inner folds, including preprocessing. The selected "
+         "model identity comes from training CV, so these remain conditional diagnostics. Serving probabilities "
+         "and the F2 threshold are unchanged. Reliability bins have equal width; empty bins remain in the CSV."),
+        ("code", "display(pd.read_csv(METRICS_DIR / 'calibration_metrics.csv'))\n"
+         "display(Image(filename=str(FIGURES_DIR / 'calibration_reliability.png')))\n"
+         "display(pd.read_csv(METRICS_DIR / 'calibration_bins.csv'))\n"
+         "display(pd.read_csv(METRICS_DIR / 'stability_comparison.csv'))\n"
+         "display(pd.read_csv(METRICS_DIR / 'stability_selections.csv'))\n"
+         "display(report['stability_diagnostics'])\n"
+         "display(pd.read_csv(METRICS_DIR / 'capacity_metrics.csv'))"),
+        ("md", "Seeds 42, 43, and 44 vary CV folds within the same training partition; they do not measure "
+         "holdout-split uncertainty. Seed 42 remains the main experiment. Capacity tables select the top 5%, "
+         "10%, and 20% by score, rounding counts up and preserving row order for ties. Training OOF and "
+         "holdout rows are separate. Lift compares selected-group precision with partition prevalence."),
         ("md", "## Responsible ML and ablations\n\nCompare the same unweighted logistic model with/without "
          "Gender, Age, and MaritalStatus, and separately without three related career variables. These prespecified "
          "experiments are training-CV diagnostics, not a fairness guarantee or an extra test-selected model. "
@@ -188,7 +203,7 @@ def main() -> None:
          "Threshold selection increases recall at the expense of false positives. Explanations describe model "
          "associations, and subgroup metrics remain uncertain because denominators are small. The fictional, "
          "cross-sectional sample does not validate a real employment decision system.\n\n"
-         "## Next Steps\n\nInvestigate calibration with independent validation, repeated/nested CV, temporal generalization, "
+         "## Next Steps\n\nValidate the calibration findings independently, investigate temporal generalization, "
          "formal fairness assessment, and support-oriented human oversight. This project must not be used as an "
          "automated system for firing, promotion, hiring, disciplinary action, or other high-impact employment decisions."),
     ])

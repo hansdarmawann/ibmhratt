@@ -11,6 +11,9 @@ venv/
 htmlcov/
 models/*.joblib
 models/*.json
+models/runs/
+models/.current-*.tmp
+.test-tmp/
 data/processed/*
 !data/processed/.gitkeep
 .vscode/

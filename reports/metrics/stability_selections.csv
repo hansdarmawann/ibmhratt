@@ -1,0 +1,4 @@
+seed,selected_model,threshold,selected_cv_ap
+42,logistic_regression,0.2,0.6514396060738317
+43,logistic_regression,0.2,0.6701999217302014
+44,logistic_regression,0.15,0.6559387010316797

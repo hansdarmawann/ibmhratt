@@ -1,10 +1,2 @@
-pandas>=2.2,<4
-numpy>=2.0,<3
-scikit-learn>=1.6,<1.9
+-r requirements-serving.txt
 matplotlib>=3.9,<4
-joblib>=1.4,<2
-threadpoolctl>=3.2,<4
-fastapi>=0.115,<1
-uvicorn>=0.34,<1
-streamlit>=1.42,<2
-pydantic>=2.10,<3

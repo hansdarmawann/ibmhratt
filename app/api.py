@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, create_model
 
-from src.config import CATEGORIES, DISCLAIMER, MODEL_PATH, NUMERIC_BOUNDS
+from src.config import CATEGORIES, CURRENT_RUN, DISCLAIMER, NUMERIC_BOUNDS
 from src.models.predict import load_pipeline, predict
 
 LOGGER = logging.getLogger(__name__)
@@ -36,9 +36,10 @@ class PredictionResponse(BaseModel):
     prediction: Literal["Yes", "No"]
     attrition_probability: float = Field(ge=0, le=1)
     threshold: float = Field(ge=0, le=1)
+    run_id: str | None = None
 
 
-def create_app(model_path: str | Path = MODEL_PATH) -> FastAPI:
+def create_app(model_path: str | Path = CURRENT_RUN) -> FastAPI:
     """Build an app with a once-per-process loaded, injectable model artifact."""
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -63,9 +64,10 @@ def create_app(model_path: str | Path = MODEL_PATH) -> FastAPI:
     @application.get("/health")
     def health(request: Request):
         available = request.app.state.pipeline is not None
+        run_id = request.app.state.pipeline.attrition_metadata_.get("run_id") if available else None
         return JSONResponse(status_code=200 if available else 503,
                             content={"status": "ok" if available else "unavailable",
-                                     "model_available": available})
+                                     "model_available": available, "run_id": run_id})
 
     @application.post("/predict", response_model=PredictionResponse)
     def predict_employee(employee: EmployeeInput, request: Request) -> dict:
@@ -78,7 +80,7 @@ def create_app(model_path: str | Path = MODEL_PATH) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return {"prediction": result["predicted_class"],
                 "attrition_probability": result["attrition_probability"],
-                "threshold": result["decision_threshold"]}
+                "threshold": result["decision_threshold"], "run_id": result["run_id"]}
 
     return application
 

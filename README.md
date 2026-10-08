@@ -71,14 +71,14 @@ ibmhratt/
 │   ├── models/                # Train, evaluate, threshold, explain, predict
 │   └── visualization/         # Headless report figures
 ├── app/{api,streamlit_app}.py
-├── models/                     # Regenerated pipeline and metadata; gitignored
+├── models/                     # Verified runs/<UUID>/ bundles and atomic current.json; gitignored
 ├── reports/{figures,metrics}/  # Actual computed evidence, intended for Git
 ├── reports/results.md
 ├── examples/employee.json     # Complete sample API payload
 ├── scripts/                    # Notebook generation/execution
 ├── tests/                      # Data, leakage boundary, inference, API, UI
 ├── environment.yml
-├── requirements.txt            # Runtime dependencies (training, API, dashboard, Docker)
+├── requirements.txt            # Training dependencies; includes requirements-serving.txt
 ├── requirements-dev.txt        # Runtime plus tests, coverage, lint, notebook execution
 ├── requirements-explain.txt    # Optional SHAP dependency
 ├── requirements-lock.txt       # Exact package constraints from verified Conda run
@@ -100,7 +100,7 @@ python -m src.models.train
 python -m pytest -q
 ```
 
-Alternatively, `conda env create -f environment.yml` creates the named environment using the same package constraints. `requirements.txt` declares supported runtime ranges and is all the Docker image installs; `requirements-dev.txt` adds testing, linting, and notebook tools; the lock file pins the packages used for the recorded results. Use the constraints above when reproducing them. Platforms may install different platform-specific transitive dependencies.
+Alternatively, `conda env create -f environment.yml` creates the named environment using the same package constraints. `requirements-serving.txt` declares API/dashboard dependencies; `requirements.txt` includes those plus training plots. The Docker runtime installs only serving dependencies; `requirements-dev.txt` adds testing, linting, and notebook tools; the lock file pins the packages used for the recorded results. Use the constraints above when reproducing them. Platforms may install different platform-specific transitive dependencies.
 
 If activation is inconvenient, use `conda run --no-capture-output -n ibmhratt python -m src.models.train`. In VS Code, select **Python (ibmhratt)** as the interpreter and notebook kernel. All project paths are derived from `src/config.py`, without machine-specific absolute paths.
 
@@ -161,6 +161,12 @@ Selection uses only five-fold training average precision. Prefer unweighted, the
 
 OOF threshold scores reuse the training folds used for model comparison and are selection diagnostics, not an unbiased performance estimate. The holdout is evaluated after choices are frozen. There are 47 positive holdout examples, so small count changes materially affect recall.
 
+### Three additional findings
+
+1. Training outer-OOF Brier score: uncalibrated **0.090**, sigmoid **0.093**; log loss **0.321** versus **0.321**. Calibration is diagnostic only; serving probabilities are unchanged.
+2. Across training CV seeds 42, 43, and 44, selections were **{'logistic_regression': 3}**, with thresholds from **0.15** to **0.20**. Seed 42 remains the main experiment.
+3. The highest-scored 10% of holdout profiles (30 rows) have precision **0.633**, recall **0.404**, and lift **3.96**. This is a capacity diagnostic, not an intervention policy.
+
 <!-- RESULTS:END -->
 
 ![Holdout PR curves](reports/figures/precision_recall_curve.png)
@@ -177,7 +183,7 @@ OOF threshold scores reuse the training folds used for model selection and can b
 
 The report includes human-readable logistic coefficients, random-forest impurity importance, and original-feature permutation importance measured as holdout AP decrease over ten shuffles. Numeric logistic coefficients represent a one-training-standard-deviation change; categorical coefficients act on encoded indicators. Full one-hot encoding and correlated predictors require cautious interpretation of individual coefficients.
 
-Optional SHAP generates global importance, a beeswarm summary, and a waterfall for the first holdout record. Logistic SHAP contributions are in **log-odds**, not additive probability points; applying the logistic function to base value plus contributions recovers the model probability. SHAP uses a training background and at most 60 holdout examples. The dashboard clearly separates this stored explanation from its interactive profile form.
+Optional SHAP generates global importance, a beeswarm summary, and a waterfall for the first holdout record. Logistic SHAP contributions are in **log-odds**, not additive probability points; applying the logistic function to base value plus contributions recovers the model probability. SHAP uses a training background and at most 60 holdout examples. The dashboard also explains the submitted profile using the active bundle's training background, aggregates one-hot contributions to original fields, and displays the ten largest contributions plus the sum of remaining contributions. Tree explanations explicitly use probability units and are checked without a sigmoid transformation.
 
 These explanations describe associations contributing to model predictions. Correlated features can share or mask importance. SHAP failure is isolated and recorded in the report; the core workflow retains coefficient and permutation explanations.
 
@@ -207,7 +213,7 @@ PowerShell equivalent:
 Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -ContentType 'application/json' -Body (Get-Content examples/employee.json -Raw)
 ```
 
-Responses contain `prediction` (Yes/No), `attrition_probability`, and `threshold`, populated from the actual model. No mock probabilities are served. The Python module accepts a dictionary or DataFrame and returns `predicted_class`, `attrition_probability`, and `decision_threshold`; a DataFrame yields a list in row order.
+Responses contain `prediction` (Yes/No), `attrition_probability`, `threshold`, and nullable `run_id`, populated from the actual model. Health responses also identify the loaded run; explicit legacy schema-1 artifacts return null. No mock probabilities are served. The Python module accepts a dictionary or DataFrame and returns `predicted_class`, `attrition_probability`, `decision_threshold`, and nullable `run_id`; a DataFrame yields a list in row order.
 
 ```bash
 python -m src.models.predict examples/employee.json
@@ -221,22 +227,23 @@ The model loads once during API startup; restart after retraining. Requests log 
 python -m streamlit run app/streamlit_app.py
 ```
 
-Open `http://localhost:8501`. Tabs cover project/dataset overview, training-only EDA, model performance, an editable prediction form, feature importance, model explanation, and responsible ML. The form displays estimated probability first, its threshold-derived class, and the frozen operating threshold. Resources refresh when the artifact changes.
+Open `http://localhost:8501`. Tabs cover project/dataset overview, training-only EDA, model performance, an editable prediction form, feature importance, model explanation, and responsible ML. The form displays estimated probability first, its threshold-derived class, and the frozen operating threshold. Resources refresh when the active run changes. Model, report, plots, sample input, and explanation background are read from that same verified run.
 
 ## Docker usage
 
 ```bash
 docker build -t employee-attrition-ml .
+python -m scripts.verify_container --image employee-attrition-ml
 docker run --rm -p 127.0.0.1:8000:8000 employee-attrition-ml
 ```
 
-The Python 3.12 slim image installs constrained dependencies and trains the model inside the image, avoiding dependence on an uncommitted local artifact or cross-version pickle. The final service runs as an unprivileged user and includes a health check. Building requires a running Linux-container Docker engine and dependency-download access. SHAP is optional and omitted from the default image build.
+The multi-stage Python 3.12 slim image trains and verifies a bundle in its builder stage. The final stage installs constrained serving dependencies and copies the verified bundle and serving code. It contains no raw training dataset or training CLI and runs as an unprivileged user with a health check. Building requires a running Linux-container Docker engine and dependency-download access. SHAP is optional and omitted from the default image build.
 
 ## Testing and reproducibility
 
 ```bash
 python -m ruff check .
-python -m pytest -q --cov --cov-report=term
+python -m pytest -q --cov --cov-report=term --cov-fail-under=0
 python -m scripts.execute_notebooks
 python -m scripts.verify_delivery
 ```
@@ -245,7 +252,7 @@ The pytest suite includes unit tests and integration tests. Tests cover loading/
 
 After training and notebook execution, `scripts.verify_delivery` also checks the delivered artifact against its recorded metrics and bootstrap point estimates, OOF coverage, SHAP additivity, executed notebook cells, and actual loopback HTTP startup/prediction for both services. Its temporary servers are stopped automatically.
 
-`make install`, `make train`, `make explain`, `make lint`, `make test`, `make coverage`, `make api`, `make app`, and `make notebooks` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
+`make install`, `make train`, `make explain`, `make lint`, `make test`, `make coverage`, `make check`, `make api`, `make app`, and `make notebooks` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
 
 Model binaries and generated split/OOF CSVs are gitignored because they are reproducible outputs. Source, raw data, executed notebooks, metrics, and figures are intended for Git. `models/.gitkeep` and `data/processed/.gitkeep` preserve their folders. Model metadata records the raw CSV SHA-256, package/Python versions, seed, features, row counts, and threshold. No Git commit or remote deployment is required to run locally.
 
@@ -253,7 +260,7 @@ Model binaries and generated split/OOF CSVs are gitignored because they are repr
 
 [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) runs on pull requests, pushes to `main`, version tags matching `v*`, and manual dispatch.
 
-- **CI:** Python 3.12 on Ubuntu and Windows, constrained dependency installation, `pip check`, Ruff lint, all pytest tests with coverage, fresh training with SHAP, a check that the committed README and `reports/results.md` match the fresh run, notebook execution, and delivery verification including live API/dashboard startup. Test results and generated model/report artifacts are retained for 14 days.
+- **CI:** Python 3.12 on Ubuntu and Windows, constrained dependency installation, `pip check`, Ruff lint, all pytest tests with coverage, fresh training with SHAP measured in the same coverage database, a combined 80% coverage gate, a check that the committed README and `reports/results.md` match the fresh run, notebook execution, and delivery verification including live API/dashboard startup. Test results and generated model/report artifacts are retained for 14 days.
 - **Container validation:** after both CI jobs pass, build the Docker image and test its real `/health` and `/predict` endpoints. Pull requests and manual runs build and test without publishing.
 - **CD (continuous delivery):** after container validation passes on a push to `main` or a `v*` tag, publish that same tested image to `ghcr.io/<owner>/<repository>`. Main publishes `latest` and a commit SHA tag; version tags publish the Git tag and a commit SHA tag. This delivers a container image; running it on a server is a separate deployment step.
 
@@ -267,8 +274,36 @@ docker run --rm -p 127.0.0.1:8000:8000 ghcr.io/hansdarmawann/ibmhratt:latest
 
 GHCR packages are private by default. Authenticate with `docker login ghcr.io` to pull a private package, or explicitly make the educational demo package public in its GitHub package settings.
 
+## Training diagnostics and profile explanations
+
+Calibration remains **diagnostic only**. Five outer folds on the training partition compare the selected estimator with and without sigmoid calibration. The calibrated arm uses three inner folds, with normalization, imputation, encoding, and scaling fitted inside each fold. The candidate identity was selected on training CV, so these conditional diagnostics are not an unbiased estimate of the complete selection procedure. Neither calibration nor the additional diagnostics changes the served pipeline or its F2 threshold.
+
+- `calibration_metrics.csv`: outer-OOF Brier score and log loss; lower is better.
+- `calibration_bins.csv` and `calibration_reliability.png`: ten equal-width probability bins; empty bins retain zero counts and missing means.
+- `stability_comparison.csv` and `stability_selections.csv`: five-fold training CV for seeds 42, 43, and 44, including selected-model frequency and threshold variation. Seed 42 remains the main experiment. This does not measure sensitivity to the reserved holdout split.
+- `capacity_metrics.csv`: precision, recall, lift, and counts for the highest-scored 5%, 10%, and 20%; counts round up and score ties preserve row order. Training OOF and final holdout are reported separately.
+
+The prediction form explains the profile just submitted. Contributions describe the model output, not causal effects. Logistic contributions add in log-odds; tree contributions add in probability units. Optional SHAP failure leaves the prediction available. Install `requirements-explain.txt` to enable this feature; the default container omits SHAP.
+
+## Versioned experiment bundles
+
+Training writes a new `models/runs/<UUID>/` directory containing `pipeline.joblib`, `metadata.json`, metrics, figures, processed diagnostics, `employee.json`, `background.json`, and a checksum manifest. The pipeline and report use schema version 2 and the same `run_id`. All files and metadata are verified before atomically replacing `models/current.json`. Failed training or publication leaves the previous active run available.
+
+API startup resolves and loads one run for its process lifetime; restart it after retraining. Each dashboard rerun resolves one active run, and caches that immutable bundle by its UUID. It never combines a model from one run with reports from another. Checksums detect accidental corruption and mixing; they do not make untrusted joblib/pickle safe.
+
+The existing `reports/`, `data/processed/`, and `examples/` paths remain reproducible exports. Git reports omit runtime UUIDs. New training does not overwrite the old `models/attrition_pipeline.joblib`; that schema-1 file can still be loaded explicitly with `python -m src.models.predict examples/employee.json --model models/attrition_pipeline.joblib`. Retrain to migrate the default API/dashboard to complete bundles.
+
+For the complete local quality gate:
+
+```bash
+python -m pip install -r requirements-dev.txt -r requirements-explain.txt -c requirements-lock.txt
+python -m scripts.check
+```
+
+This runs lint, all tests, fresh training, combined coverage (minimum 80%), notebook regeneration/execution, and live service verification. Tests alone can report lower coverage because training and plotting are exercised by the separate integration run. Temporary files and the coverage database use a unique directory under `.test-tmp/`; reports and notebooks are regenerated. In a restricted Windows sandbox, pytest's private-directory ACLs may require running this command with the sandbox's approved execution access. No assertions are skipped to work around permissions.
+
 ## Limitations and future improvements
 
 This is a small fictional, cross-sectional dataset with no temporal validation or guaranteed feature availability before an attrition event. The structural leakage safeguards do not prove absence of real-world look-ahead bias. Only one holdout split is used; CV variability is reported, and holdout metrics can fluctuate. Scores are uncalibrated probability estimates, particularly for class-weighted models. Ordinal spacing and broad schema bounds are modeling assumptions.
 
-Future work includes nested/repeated CV, constrained hyperparameter search, independent calibration, subgroup uncertainty and fairness metrics, temporal/external validation, feature/data drift monitoring, MLflow experiment tracking, DVC data versioning, governed cloud deployment, privacy-preserving database-backed inference logging, and monitored scheduled retraining. These require evidence and a defined operating purpose before adding infrastructure.
+Future work includes nested model-selection evaluation, constrained hyperparameter search, independently validated serving calibration, subgroup uncertainty and fairness metrics, temporal/external validation, feature/data drift monitoring, MLflow experiment tracking, DVC data versioning, governed cloud deployment, privacy-preserving database-backed inference logging, and monitored scheduled retraining. These require evidence and a defined operating purpose before adding infrastructure.
