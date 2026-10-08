@@ -5,6 +5,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data/raw/WA_Fn-UseC_-HR-Employee-Attrition.csv"
 MODEL_PATH = ROOT / "models/attrition_pipeline.joblib"
+MODELS_DIR = ROOT / "models"
+CURRENT_RUN = MODELS_DIR / "current.json"
 METRICS_DIR = ROOT / "reports/metrics"
 FIGURES_DIR = ROOT / "reports/figures"
 RANDOM_STATE = 42
