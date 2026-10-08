@@ -4,10 +4,10 @@ import numpy as np
 import pytest
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 
-from src.config import FEATURE_COLUMNS
-from src.features.preprocess import build_pipeline
-from src.models.local_explain import check_additive, explain_profile, explained_probability
-from src.models.predict import predict
+from attrition.config import FEATURE_COLUMNS
+from attrition.features.preprocess import build_pipeline
+from attrition.models.local_explain import check_additive, explain_profile, explained_probability
+from attrition.models.predict import predict
 
 
 def test_linear_profile_aggregates_and_reconstructs(employee, fitted_pipeline, partitions):
@@ -43,7 +43,7 @@ def test_optional_failure_does_not_break_prediction(monkeypatch, fitted_pipeline
     def unavailable(*args):
         raise ImportError("SHAP absent")
 
-    monkeypatch.setattr("src.models.local_explain.shap_values", unavailable)
+    monkeypatch.setattr("attrition.models.local_explain.shap_values", unavailable)
     result = explain_profile(fitted_pipeline, employee, partitions[0].head(5))
     assert result["status"] == "unavailable"
     assert np.isfinite(predict(employee, pipeline=fitted_pipeline)["attrition_probability"])

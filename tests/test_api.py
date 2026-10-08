@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import create_app
-from src.models.predict import predict
+from attrition.models.predict import predict
 
 
 def test_health_and_prediction(artifact, employee):

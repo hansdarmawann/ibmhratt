@@ -9,8 +9,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, create_model
 
-from src.config import CATEGORIES, CURRENT_RUN, DISCLAIMER, NUMERIC_BOUNDS
-from src.models.predict import load_pipeline, predict
+from attrition.config import CATEGORIES, CURRENT_RUN, DISCLAIMER, NUMERIC_BOUNDS
+from attrition.models.predict import load_pipeline, predict
 
 LOGGER = logging.getLogger(__name__)
 

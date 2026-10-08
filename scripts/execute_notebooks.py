@@ -6,7 +6,7 @@ import os
 import nbformat
 from nbclient import NotebookClient
 
-from src.config import ROOT
+from attrition.config import ROOT
 
 LOGGER = logging.getLogger(__name__)
 

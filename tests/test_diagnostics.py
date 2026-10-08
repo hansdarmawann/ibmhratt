@@ -10,15 +10,15 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.pipeline import Pipeline
 
-from src.features.preprocess import build_pipeline
-from src.models.diagnostics import (
+from attrition.features.preprocess import build_pipeline
+from attrition.models.diagnostics import (
     calibration_diagnostics,
     capacity_metrics,
     reliability_table,
     stability_diagnostics,
 )
-from src.models.evaluate import cross_validation_metrics
-from src.models.train import select_model
+from attrition.models.evaluate import cross_validation_metrics
+from attrition.models.train import select_model
 
 
 class RecordFitRows(TransformerMixin, BaseEstimator):
@@ -103,7 +103,7 @@ def test_capacity_rounds_up_and_ties_use_position():
 
 
 def test_diagnostics_do_not_mutate_serving_pipeline(employee, fitted_pipeline, partitions):
-    from src.models.predict import predict
+    from attrition.models.predict import predict
 
     before = predict(employee, pipeline=fitted_pipeline)
     X, y = small_training(partitions)

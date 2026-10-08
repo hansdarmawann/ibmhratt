@@ -14,7 +14,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import cross_validate
 
-from src.config import DEFAULT_THRESHOLD, RANDOM_STATE
+from attrition.config import DEFAULT_THRESHOLD, RANDOM_STATE
 
 SCORING = {
     "roc_auc": "roc_auc", "pr_auc": "average_precision", "precision": "precision",

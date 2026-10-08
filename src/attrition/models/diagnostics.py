@@ -7,8 +7,8 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import brier_score_loss, log_loss
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
-from src.models.evaluate import cross_validation_metrics
-from src.models.threshold import select_threshold, threshold_table
+from attrition.models.evaluate import cross_validation_metrics
+from attrition.models.threshold import select_threshold, threshold_table
 
 
 def reliability_table(y, probabilities, *, bins: int = 10) -> pd.DataFrame:

@@ -4,10 +4,10 @@ PYTHON ?= python
 install:
 	$(PYTHON) -m pip install -r requirements-dev.txt -c requirements-lock.txt
 train:
-	$(PYTHON) -m src.models.train
+	$(PYTHON) -m attrition.models.train
 explain:
 	$(PYTHON) -m pip install -r requirements-explain.txt -c requirements-lock.txt
-	$(PYTHON) -m src.models.train --with-shap
+	$(PYTHON) -m attrition.models.train --with-shap
 lint:
 	$(PYTHON) -m ruff check .
 typecheck:
