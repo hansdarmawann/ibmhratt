@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.evaluate import BOOTSTRAP_METRICS, bootstrap_intervals, subgroup_metrics
-from src.models.threshold import select_threshold
-from src.models.train import RESULTS_END, RESULTS_START, replace_export, replace_results_block, select_model
+from attrition.models.evaluate import BOOTSTRAP_METRICS, bootstrap_intervals, subgroup_metrics
+from attrition.models.threshold import select_threshold
+from attrition.models.train import RESULTS_END, RESULTS_START, replace_export, replace_results_block, select_model
 
 
 def summaries(**ap):

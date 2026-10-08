@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from src.config import (
+from attrition.config import (
     CATEGORIES,
     CONSTANT_COLUMNS,
     FEATURE_COLUMNS,

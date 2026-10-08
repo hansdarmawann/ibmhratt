@@ -15,12 +15,13 @@ import nbformat
 import numpy as np
 import pandas as pd
 
-from src.config import DATA_PATH, ROOT
-from src.data.load_data import load_data, split_data
-from src.models.artifacts import load_bundle
-from src.models.evaluate import evaluate_probabilities
-from src.models.local_explain import explained_probability
-from src.models.predict import predict
+from attrition.config import DATA_PATH, ROOT
+from attrition.data.load_data import load_data, split_data
+from attrition.models.artifacts import load_bundle
+from attrition.models.evaluate import evaluate_probabilities
+from attrition.models.local_explain import explained_probability
+from attrition.models.predict import predict
+from attrition.monitoring.drift import PROFILE_FILE, drift_report
 
 LOGGER = logging.getLogger(__name__)
 
@@ -108,7 +109,11 @@ def main() -> None:
             if cell.cell_type == "code":
                 assert cell.execution_count is not None, f"Unexecuted cell in {path.name}"
                 assert all(output.output_type != "error" for output in cell.outputs)
-    LOGGER.info("Saved pipeline metrics, OOF coverage, SHAP additivity, and four notebooks verified")
+    # The training profile must describe the training rows; the holdout is a fresh sample of the same data.
+    profile = json.loads((bundle.path / PROFILE_FILE).read_text(encoding="utf-8"))
+    assert profile["rows"] == len(X_train)
+    assert drift_report(X_test, profile)["psi"].lt(0.25).all()
+    LOGGER.info("Saved pipeline metrics, OOF coverage, SHAP additivity, drift profile, and four notebooks verified")
     example = json.loads((bundle.path / "employee.json").read_text(encoding="utf-8"))
     with local_service(["uvicorn", "app.api:app", "--host", "127.0.0.1", "--port", "{port}"],
                        "/health") as base_url:
@@ -116,12 +121,17 @@ def main() -> None:
                                          headers={"Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(request, timeout=10) as response:
             prediction = json.load(response)
+            assert response.headers["X-Request-ID"]
+        with urllib.request.urlopen(base_url + "/model", timeout=10) as response:
+            info = json.load(response)
+        assert info["run_id"] == bundle.run_id
+        assert info["decision_threshold"] == bundle.report["selected_threshold"]
         expected = predict(example, pipeline=pipeline)
         np.testing.assert_allclose(prediction["attrition_probability"], expected["attrition_probability"])
         assert prediction["prediction"] == expected["predicted_class"]
         assert prediction["threshold"] == expected["decision_threshold"]
         assert prediction["run_id"] == bundle.run_id
-    LOGGER.info("Live FastAPI /health and /predict verified against saved pipeline")
+    LOGGER.info("Live FastAPI /health, /model, and /predict verified against saved pipeline")
     with local_service(["streamlit", "run", "app/streamlit_app.py", "--server.address=127.0.0.1",
                         "--server.port={port}", "--server.headless=true", "--browser.gatherUsageStats=false"],
                        "/_stcore/health") as base_url, urllib.request.urlopen(base_url, timeout=10) as response:

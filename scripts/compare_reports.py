@@ -15,7 +15,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from src.config import ROOT
+from attrition.config import ROOT
 
 REPORT_DIRS = ["reports/metrics", "reports/figures"]
 RTOL, ATOL = 1e-6, 1e-9

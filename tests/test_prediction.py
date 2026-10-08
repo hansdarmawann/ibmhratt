@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.evaluate import evaluate_probabilities
-from src.models.predict import load_pipeline, predict
-from src.models.threshold import select_threshold, threshold_table
+from attrition.models.evaluate import evaluate_probabilities
+from attrition.models.predict import load_pipeline, predict
+from attrition.models.threshold import select_threshold, threshold_table
 
 
 def test_serialization_preserves_probability_and_threshold(employee, fitted_pipeline, artifact):

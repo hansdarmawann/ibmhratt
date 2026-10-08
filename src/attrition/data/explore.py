@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.config import CATEGORIES, FEATURE_COLUMNS, TARGET
-from src.visualization.plots import save_eda_plots
+from attrition.config import CATEGORIES, FEATURE_COLUMNS, TARGET
+from attrition.visualization.plots import save_eda_plots
 
 
 def exploration_tables(X_train: pd.DataFrame, y_train: pd.Series) -> dict:

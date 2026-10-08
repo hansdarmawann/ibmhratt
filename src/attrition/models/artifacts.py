@@ -16,7 +16,7 @@ import numpy as np
 from sklearn.exceptions import InconsistentVersionWarning
 from sklearn.pipeline import Pipeline
 
-from src.config import CURRENT_RUN, FEATURE_COLUMNS
+from attrition.config import CURRENT_RUN, FEATURE_COLUMNS
 
 
 def read_json(path: Path):
@@ -45,13 +45,22 @@ def validate_pipeline(pipeline: Pipeline) -> dict:
     return metadata
 
 
+def load_pickle(path: Path) -> Pipeline:
+    """Unpickle a trusted pipeline; incompatible code or library versions fail clearly."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", InconsistentVersionWarning)
+        try:
+            return joblib.load(path)
+        except ModuleNotFoundError as exc:
+            # Pickles store module paths, e.g. bundles trained before the src -> attrition rename.
+            raise ValueError("Model artifact references modules this code no longer has; retrain the model.") from exc
+
+
 def load_legacy_pipeline(path: Path) -> Pipeline:
     """Explicit path support for the previous, standalone schema-1 artifact."""
     if not path.is_file():
-        raise FileNotFoundError("Model is unavailable. Run: python -m src.models.train")
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", InconsistentVersionWarning)
-        pipeline = joblib.load(path)
+        raise FileNotFoundError("Model is unavailable. Run: python -m attrition.models.train")
+    pipeline = load_pickle(path)
     metadata = validate_pipeline(pipeline)
     if metadata["schema_version"] != 1:
         raise ValueError("Schema-2 models must be loaded through their verified bundle.")
@@ -77,7 +86,7 @@ class Bundle:
 def active_run_path(pointer: Path = CURRENT_RUN) -> Path:
     """Resolve a single pointer snapshot; callers keep this path for the request."""
     if not pointer.is_file():
-        raise FileNotFoundError("Model is unavailable. Run: python -m src.models.train")
+        raise FileNotFoundError("Model is unavailable. Run: python -m attrition.models.train")
     document = read_json(pointer)
     run_id = document.get("run_id")
     try:
@@ -120,9 +129,7 @@ def load_bundle(path: str | Path = CURRENT_RUN) -> Bundle:
             raise ValueError("Invalid bundle file path.")
         if sha256(target) != checksum:
             raise ValueError(f"Bundle checksum mismatch: {name}")
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", InconsistentVersionWarning)
-        pipeline = joblib.load(path / "pipeline.joblib")
+    pipeline = load_pickle(path / "pipeline.joblib")
     metadata = validate_pipeline(pipeline)
     report = read_json(path / "metrics/model_metrics.json")
     if (metadata.get("schema_version") != 2 or metadata.get("run_id") != run_id
@@ -133,7 +140,7 @@ def load_bundle(path: str | Path = CURRENT_RUN) -> Bundle:
     # These inputs are part of the serving bundle, not optional external files.
     import pandas as pd
 
-    from src.data.validate_data import validate_features
+    from attrition.data.validate_data import validate_features
 
     validate_features(pd.DataFrame([read_json(path / "employee.json")]))
     validate_features(pd.DataFrame(read_json(path / "background.json")))

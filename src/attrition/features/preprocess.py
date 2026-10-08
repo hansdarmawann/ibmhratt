@@ -7,7 +7,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 
-from src.config import CONSTANT_COLUMNS, FEATURE_COLUMNS, ID_COLUMN
+from attrition.config import CONSTANT_COLUMNS, FEATURE_COLUMNS, ID_COLUMN
 
 
 def normalize_missing(frame: pd.DataFrame) -> pd.DataFrame:

@@ -10,7 +10,7 @@ An end-to-end Python portfolio project that estimates employee attrition probabi
 
 ```bash
 conda env create -f environment.yml && conda activate ibmhratt
-python -m src.models.train            # validate data, compare models, save the pipeline and reports
+python -m attrition.models.train            # validate data, compare models, save the pipeline and reports
 python -m pytest -q                   # unit and integration tests
 python -m uvicorn app.api:app --port 8000      # API docs at http://127.0.0.1:8000/docs
 python -m streamlit run app/streamlit_app.py   # dashboard at http://localhost:8501
@@ -33,7 +33,7 @@ The canonical dataset is `data/raw/WA_Fn-UseC_-HR-Employee-Attrition.csv`; no ro
 | `StandardHours` | Constant 80 |
 | `EmployeeNumber` | Unique identifier, without portable predictive meaning |
 
-The remaining 30 predictors are documented in `src/config.py`. Numeric bounds express broad schema constraints, not fitted dataset extrema. Ordinal ratings are treated numerically; the equal-spacing assumption is a limitation.
+The remaining 30 predictors are documented in `src/attrition/config.py`. Numeric bounds express broad schema constraints, not fitted dataset extrema. Ordinal ratings are treated numerically; the equal-spacing assumption is a limitation.
 
 ## Project architecture
 
@@ -64,7 +64,7 @@ ibmhratt/
 ├── data/{raw,processed}/        # Canonical raw CSV and reproducible split/OOF manifests
 ├── .github/workflows/          # Cross-platform CI and tested image delivery to GHCR
 ├── notebooks/                  # Four executed narrative exploration notebooks
-├── src/
+├── src/attrition/              # Installable package (`pip install -e .`, included in requirements-dev.txt)
 │   ├── config.py               # Paths, schema, seed, and shared settings
 │   ├── data/                   # Loading, validation, training-only EDA
 │   ├── features/preprocess.py  # Fold-fitted transformations
@@ -97,23 +97,23 @@ Run commands from the repository root. Python **3.12** is the verified runtime.
 conda create -n ibmhratt python=3.12 pip -y
 conda activate ibmhratt
 python -m pip install -r requirements-dev.txt -c requirements-lock.txt
-python -m src.models.train
+python -m attrition.models.train
 python -m pytest -q
 ```
 
 Alternatively, `conda env create -f environment.yml` creates the named environment using the same package constraints. `requirements-serving.txt` declares API/dashboard dependencies; `requirements.txt` includes those plus training plots. The Docker runtime installs only serving dependencies; `requirements-dev.txt` adds testing, linting, and notebook tools; the lock file pins the packages used for the recorded results. Use the constraints above when reproducing them. Platforms may install different platform-specific transitive dependencies.
 
-If activation is inconvenient, use `conda run --no-capture-output -n ibmhratt python -m src.models.train`. In VS Code, select **Python (ibmhratt)** as the interpreter and notebook kernel. All project paths are derived from `src/config.py`, without machine-specific absolute paths.
+If activation is inconvenient, use `conda run --no-capture-output -n ibmhratt python -m attrition.models.train`. In VS Code, select **Python (ibmhratt)** as the interpreter and notebook kernel. All project paths are derived from `src/attrition/config.py`, without machine-specific absolute paths. `requirements-dev.txt` installs the `attrition` package in editable mode, so `python -m attrition...` commands work after installation; paths resolve relative to the checkout, so use an editable install or `PYTHONPATH=src` rather than a regular `pip install .`.
 
 Optional SHAP and executed notebooks:
 
 ```bash
 python -m pip install -r requirements-explain.txt -c requirements-lock.txt
-python -m src.models.train --with-shap
+python -m attrition.models.train --with-shap
 python -m scripts.execute_notebooks
 ```
 
-The four notebooks cover data understanding, EDA, feature engineering, and model experiments. Training must run first because notebooks display its generated figures and metrics. Reusable logic lives in `src/`; `scripts/build_notebooks.py` regenerates notebook cell sources and clears their outputs.
+The four notebooks cover data understanding, EDA, feature engineering, and model experiments. Training must run first because notebooks display its generated figures and metrics. Reusable logic lives in `src/attrition/`; `scripts/build_notebooks.py` regenerates notebook cell sources and clears their outputs.
 
 ## EDA highlights
 
@@ -214,13 +214,17 @@ PowerShell equivalent:
 Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -ContentType 'application/json' -Body (Get-Content examples/employee.json -Raw)
 ```
 
-Responses contain `prediction` (Yes/No), `attrition_probability`, `threshold`, and nullable `run_id`, populated from the actual model. Health responses also identify the loaded run; explicit legacy schema-1 artifacts return null. No mock probabilities are served. The Python module accepts a dictionary or DataFrame and returns `predicted_class`, `attrition_probability`, `decision_threshold`, and nullable `run_id`; a DataFrame yields a list in row order.
+Responses contain `prediction` (Yes/No), `attrition_probability`, `threshold`, and nullable `run_id`, populated from the actual model. Health responses also identify the loaded run; explicit legacy schema-1 artifacts return null. No mock probabilities are served.
+
+`POST /predict/batch` accepts `{"employees": [...]}` with 1 to 1,000 employee objects using the same per-record schema, and returns `count` plus `predictions` in request order. `GET /model` reports the API version, run ID, selected model, decision threshold, feature count, training rows, dataset hash, pinned package versions, and the frozen holdout metrics of the loaded bundle (null metrics for an explicit legacy file).
+
+Every response carries an `X-Request-ID` header: a safe caller-supplied value (letters, digits, `.`, `_`, `-`, at most 64 characters) is echoed, otherwise one is generated. The `app.api` logger records request ID, method, path, status, and duration only, never request bodies. Set `ATTRITION_API_KEY` before starting the server to require a matching `X-API-Key` header on `/model`, `/predict`, and `/predict/batch`; `/` and `/health` stay open for probes. The Python module accepts a dictionary or DataFrame and returns `predicted_class`, `attrition_probability`, `decision_threshold`, and nullable `run_id`; a DataFrame yields a list in row order.
 
 ```bash
-python -m src.models.predict examples/employee.json
+python -m attrition.models.predict examples/employee.json
 ```
 
-The model loads once during API startup; restart after retraining. Requests log event/count information without raw profiles. Joblib artifacts must come from a trusted source because pickle-based loading can execute code. This local demo does not implement authentication or production access controls.
+The model loads once during API startup; restart after retraining. Requests log event/count information without raw profiles. Joblib artifacts must come from a trusted source because pickle-based loading can execute code. The optional shared API key is a basic demo guard, not production identity, authorization, rate limiting, or TLS; deploy behind proper access controls.
 
 ## Streamlit usage
 
@@ -254,7 +258,7 @@ The pytest suite includes unit tests and integration tests. Tests cover loading/
 
 After training and notebook execution, `scripts.verify_delivery` also checks the delivered artifact against its recorded metrics and bootstrap point estimates, OOF coverage, SHAP additivity, executed notebook cells, and actual loopback HTTP startup/prediction for both services. Its temporary servers are stopped automatically.
 
-`make install`, `make train`, `make explain`, `make lint`, `make typecheck`, `make test`, `make coverage`, `make check`, `make api`, `make app`, and `make notebooks` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
+`make install`, `make train`, `make explain`, `make lint`, `make typecheck`, `make test`, `make coverage`, `make check`, `make api`, `make app`, `make notebooks`, and `make prune` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
 
 Optional Git hooks run Ruff, mypy, and basic file checks before each commit, using the activated environment's pinned tools: `python -m pip install pre-commit`, then `pre-commit install`. Generated reports and notebooks are excluded; CI compares them with a fresh run instead.
 
@@ -291,11 +295,13 @@ The prediction form explains the profile just submitted. Contributions describe 
 
 ## Versioned experiment bundles
 
-Training writes a new `models/runs/<UUID>/` directory containing `pipeline.joblib`, `metadata.json`, metrics, figures, processed diagnostics, `employee.json`, `background.json`, and a checksum manifest. The pipeline and report use schema version 2 and the same `run_id`. All files and metadata are verified before atomically replacing `models/current.json`. Failed training or publication leaves the previous active run available.
+Training writes a new `models/runs/<UUID>/` directory containing `pipeline.joblib`, `metadata.json`, metrics, figures, processed diagnostics, `employee.json`, `background.json`, `reference_profile.json`, and a checksum manifest. The pipeline and report use schema version 2 and the same `run_id`. All files and metadata are verified before atomically replacing `models/current.json`. Failed training or publication leaves the previous active run available.
 
 API startup resolves and loads one run for its process lifetime; restart it after retraining. Each dashboard rerun resolves one active run, and caches that immutable bundle by its UUID. It never combines a model from one run with reports from another. Checksums detect accidental corruption and mixing; they do not make untrusted joblib/pickle safe.
 
-The existing `reports/`, `data/processed/`, and `examples/` paths remain reproducible exports. Git reports omit runtime UUIDs. New training does not overwrite the old `models/attrition_pipeline.joblib`; that schema-1 file can still be loaded explicitly with `python -m src.models.predict examples/employee.json --model models/attrition_pipeline.joblib`. Retrain to migrate the default API/dashboard to complete bundles.
+Each training run adds a bundle. `python -m attrition.models.prune --keep 5` removes all but the five most recently written runs and never removes the active run; add `--dry-run` to list what would be removed. Only UUID-named run folders are considered, and an unverifiable `current.json` stops pruning without deleting anything. A running API keeps serving the bundle it loaded at startup.
+
+The existing `reports/`, `data/processed/`, and `examples/` paths remain reproducible exports. Git reports omit runtime UUIDs. Schema-1 files can still be loaded explicitly with `python -m attrition.models.predict examples/employee.json --model <file>.joblib`. Pickles record module paths, so artifacts trained before the package moved from `src` to `attrition` fail with a clear "retrain" error; run `python -m attrition.models.train` to replace them.
 
 For the complete local quality gate:
 
@@ -306,8 +312,19 @@ python -m scripts.check
 
 This runs lint, type checking, all tests, fresh training, combined coverage (minimum 80%), notebook regeneration/execution, and live service verification. Tests alone can report lower coverage because training and plotting are exercised by the separate integration run. Temporary files and the coverage database use a unique directory under `.test-tmp/`; reports and notebooks are regenerated. In a restricted Windows sandbox, pytest's private-directory ACLs may require running this command with the sandbox's approved execution access. No assertions are skipped to work around permissions.
 
+## Input drift monitoring
+
+Each bundle stores `reference_profile.json`: training-row deciles for numeric features, category shares, and missing rates. The drift check compares new records with that profile using the Population Stability Index (PSI) per feature:
+
+```bash
+python -m attrition.monitoring.drift new_records.csv --output reports/drift.csv
+python -m attrition.monitoring.drift batch.json --fail-on-shift   # exit status 1 if any feature shifts
+```
+
+Input can be CSV or JSON (one object, a list, or the `{"employees": [...]}` body used by `/predict/batch`) and must pass the same schema validation as prediction. Status follows common PSI conventions: below 0.10 stable, 0.10 to 0.25 moderate, 0.25 or more shift. Unseen categories form their own bin and are reported as `unseen_share`; missing values are excluded from PSI and reported as missing rates. Below 100 records, PSI mostly reflects sampling noise and the command warns. Drift shows that inputs differ from training data; it does not show that predictions are wrong or that attrition rates changed, which requires labeled outcomes.
+
 ## Limitations and future improvements
 
 This is a small fictional, cross-sectional dataset with no temporal validation or guaranteed feature availability before an attrition event. The structural leakage safeguards do not prove absence of real-world look-ahead bias. Only one holdout split is used; CV variability is reported, and holdout metrics can fluctuate. Scores are uncalibrated probability estimates, particularly for class-weighted models. Ordinal spacing and broad schema bounds are modeling assumptions.
 
-Future work includes nested model-selection evaluation, constrained hyperparameter search, independently validated serving calibration, subgroup uncertainty and fairness metrics, temporal/external validation, feature/data drift monitoring, MLflow experiment tracking, DVC data versioning, governed cloud deployment, privacy-preserving database-backed inference logging, and monitored scheduled retraining. These require evidence and a defined operating purpose before adding infrastructure.
+Future work includes nested model-selection evaluation, constrained hyperparameter search, independently validated serving calibration, subgroup uncertainty and fairness metrics, temporal/external validation, scheduled drift monitoring on governed inference traffic, MLflow experiment tracking, DVC data versioning, governed cloud deployment, privacy-preserving database-backed inference logging, and monitored scheduled retraining. These require evidence and a defined operating purpose before adding infrastructure.

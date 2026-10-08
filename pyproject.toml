@@ -1,10 +1,29 @@
-# Tool configuration only. Dependencies live in the requirements files and
-# requirements-lock.txt so pip, Conda, Docker, and CI share one source.
+# Dependencies live in the requirements files and requirements-lock.txt so pip,
+# Conda, Docker, and CI share one source. The package reuses the serving list.
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ibmhratt"
+description = "Educational employee attrition modeling, API, and dashboard"
+requires-python = ">=3.12"
+dynamic = ["version", "dependencies"]
+
+[tool.setuptools.dynamic]
+version = {attr = "attrition.__version__"}
+dependencies = {file = ["requirements-serving.txt"]}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.ruff]
 line-length = 120
 target-version = "py312"
 extend-exclude = ["notebooks"]
+# First-party import detection for the src layout plus app/ and scripts/.
+src = ["src", "."]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "RET", "PTH", "C4", "PIE", "RUF"]
@@ -12,13 +31,13 @@ select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "RET", "PTH", "C4", "PIE
 ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.per-file-ignores]
-# Intentional late imports: sys.path setup for Streamlit, matplotlib backend selection.
-"app/streamlit_app.py" = ["E402"]
-"src/visualization/plots.py" = ["E402"]
+# Intentional late imports: matplotlib backend selection.
+"src/attrition/visualization/plots.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.12"
 files = ["src", "app", "scripts"]
+mypy_path = "src"
 # scikit-learn, joblib, SHAP, and Streamlit internals ship without complete stubs.
 ignore_missing_imports = true
 check_untyped_defs = true
@@ -27,6 +46,8 @@ warn_redundant_casts = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Import the package from the checkout even without an editable install.
+pythonpath = ["src", "."]
 addopts = "-ra"
 
 [tool.coverage.run]

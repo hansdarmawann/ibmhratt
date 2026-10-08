@@ -2,7 +2,7 @@
 
 from streamlit.testing.v1 import AppTest
 
-from src.config import ROOT
+from attrition.config import ROOT
 
 
 def dashboard():
@@ -11,7 +11,7 @@ def dashboard():
 
 def test_dashboard_renders_predicts_and_explains(monkeypatch, bundle_factory, tmp_path):
     bundle = bundle_factory()
-    monkeypatch.setattr("src.config.CURRENT_RUN", tmp_path / "models/current.json")
+    monkeypatch.setattr("attrition.config.CURRENT_RUN", tmp_path / "models/current.json")
     captured = []
 
     def explanation(pipeline, profile, background):
@@ -19,7 +19,7 @@ def test_dashboard_renders_predicts_and_explains(monkeypatch, bundle_factory, tm
         return {"status": "generated", "units": "log-odds", "base_value": -1, "other_contribution": 0.1,
                 "contributions": [{"feature": "Age", "contribution": 0.2, "direction": "Higher"}]}
 
-    monkeypatch.setattr("src.models.local_explain.explain_profile", explanation)
+    monkeypatch.setattr("attrition.models.local_explain.explain_profile", explanation)
     app = dashboard()
     assert not app.exception
     next(widget for widget in app.number_input if widget.label == "Age").set_value(45)
@@ -40,8 +40,8 @@ def test_dashboard_renders_predicts_and_explains(monkeypatch, bundle_factory, tm
 
 def test_dashboard_optional_explanation_failure(monkeypatch, bundle_factory, tmp_path):
     bundle_factory()
-    monkeypatch.setattr("src.config.CURRENT_RUN", tmp_path / "models/current.json")
-    monkeypatch.setattr("src.models.local_explain.explain_profile", lambda *args: {"status": "unavailable"})
+    monkeypatch.setattr("attrition.config.CURRENT_RUN", tmp_path / "models/current.json")
+    monkeypatch.setattr("attrition.models.local_explain.explain_profile", lambda *args: {"status": "unavailable"})
     app = dashboard()
     app.button[0].click().run()
     assert not app.exception
@@ -50,7 +50,7 @@ def test_dashboard_optional_explanation_failure(monkeypatch, bundle_factory, tmp
 
 
 def test_dashboard_without_bundle(monkeypatch, tmp_path):
-    monkeypatch.setattr("src.config.CURRENT_RUN", tmp_path / "missing.json")
+    monkeypatch.setattr("attrition.config.CURRENT_RUN", tmp_path / "missing.json")
     app = dashboard()
     assert not app.exception
     assert not app.button
@@ -60,7 +60,7 @@ def test_dashboard_without_bundle(monkeypatch, tmp_path):
 def test_dashboard_rejects_corrupt_bundle(monkeypatch, bundle_factory, tmp_path):
     bundle = bundle_factory()
     (bundle.path / "employee.json").write_text("{}")
-    monkeypatch.setattr("src.config.CURRENT_RUN", tmp_path / "models/current.json")
+    monkeypatch.setattr("attrition.config.CURRENT_RUN", tmp_path / "models/current.json")
     app = dashboard()
     assert not app.exception
     assert any("could not be verified" in error.value for error in app.error)

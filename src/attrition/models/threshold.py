@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from src.models.evaluate import evaluate_probabilities
+from attrition.models.evaluate import evaluate_probabilities
 
 
 def threshold_table(y, probabilities, thresholds=None) -> pd.DataFrame:
