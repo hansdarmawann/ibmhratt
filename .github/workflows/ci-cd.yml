@@ -56,7 +56,7 @@ jobs:
           python -m pytest -q --junitxml=reports/test-results.xml
           --cov --cov-report=term --cov-fail-under=0
       - name: Train from the canonical raw dataset
-        run: python -m coverage run --append -m src.models.train --with-shap
+        run: python -m coverage run --append -m attrition.models.train --with-shap
       - name: Enforce combined test and training coverage
         run: |
           python -m coverage report --fail-under=80

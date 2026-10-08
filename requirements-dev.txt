@@ -1,5 +1,7 @@
 # Training plus optional-explainer tests, coverage, linting, and notebooks.
 -r requirements-explain.txt
+# The project itself, so `python -m attrition...` works from any directory.
+-e .
 pytest>=8.3,<10
 pytest-cov>=6.0,<8
 httpx>=0.28,<1

@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+# src/attrition/config.py -> repository root. Run from a checkout (editable install or PYTHONPATH=src).
+ROOT = Path(__file__).resolve().parents[2]
 DATA_PATH = ROOT / "data/raw/WA_Fn-UseC_-HR-Employee-Attrition.csv"
 MODEL_PATH = ROOT / "models/attrition_pipeline.joblib"
 MODELS_DIR = ROOT / "models"

@@ -1,4 +1,4 @@
-"""Reproducible training CLI: python -m src.models.train [--with-shap]."""
+"""Reproducible training CLI: python -m attrition.models.train [--with-shap]."""
 
 import argparse
 import hashlib
@@ -20,7 +20,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from threadpoolctl import threadpool_limits
 
-from src.config import (
+from attrition.config import (
     CV_FOLDS,
     DATA_PATH,
     DEFAULT_THRESHOLD,
@@ -31,21 +31,21 @@ from src.config import (
     SENSITIVE_COLUMNS,
     TARGET_MAPPING,
 )
-from src.data.explore import save_exploration
-from src.data.load_data import load_data, split_data
-from src.data.validate_data import data_audit
-from src.features.preprocess import build_pipeline, feature_exclusions
-from src.models.artifacts import publish_bundle, seal_bundle
-from src.models.diagnostics import calibration_diagnostics, capacity_metrics, stability_diagnostics
-from src.models.evaluate import (
+from attrition.data.explore import save_exploration
+from attrition.data.load_data import load_data, split_data
+from attrition.data.validate_data import data_audit
+from attrition.features.preprocess import build_pipeline, feature_exclusions
+from attrition.models.artifacts import publish_bundle, seal_bundle
+from attrition.models.diagnostics import calibration_diagnostics, capacity_metrics, stability_diagnostics
+from attrition.models.evaluate import (
     bootstrap_intervals,
     cross_validation_metrics,
     evaluate_probabilities,
     subgroup_metrics,
 )
-from src.models.explain import explain_models, explain_shap
-from src.models.threshold import select_threshold, threshold_table
-from src.visualization.plots import save_calibration_plot, save_evaluation_plots
+from attrition.models.explain import explain_models, explain_shap
+from attrition.models.threshold import select_threshold, threshold_table
+from attrition.visualization.plots import save_calibration_plot, save_evaluation_plots
 
 LOGGER = logging.getLogger(__name__)
 RESULTS_START, RESULTS_END = "<!-- RESULTS:START -->", "<!-- RESULTS:END -->"
@@ -401,7 +401,7 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
     calibration_scores, repeat_choices = training_diagnostics(pipelines, summaries, point, parts, paths)
     holdout = evaluate_holdout(pipelines, point, parts, paths)
     shap_status = (explain_shap(pipelines[point.selected], parts.X_train, parts.X_test, paths.metrics, paths.figures)
-                   if with_shap else {"status": "not_requested", "enable": "python -m src.models.train --with-shap"})
+                   if with_shap else {"status": "not_requested", "enable": "python -m attrition.models.train --with-shap"})
     metadata = build_metadata(run_id, point, parts, data_path)
     report = build_report(metadata, summaries, point, holdout, calibration_scores, repeat_choices, shap_status)
     result_text, example = write_bundle(paths, pipelines[point.selected], metadata, report, parts)

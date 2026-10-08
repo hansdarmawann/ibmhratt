@@ -10,7 +10,7 @@ An end-to-end Python portfolio project that estimates employee attrition probabi
 
 ```bash
 conda env create -f environment.yml && conda activate ibmhratt
-python -m src.models.train            # validate data, compare models, save the pipeline and reports
+python -m attrition.models.train            # validate data, compare models, save the pipeline and reports
 python -m pytest -q                   # unit and integration tests
 python -m uvicorn app.api:app --port 8000      # API docs at http://127.0.0.1:8000/docs
 python -m streamlit run app/streamlit_app.py   # dashboard at http://localhost:8501
@@ -33,7 +33,7 @@ The canonical dataset is `data/raw/WA_Fn-UseC_-HR-Employee-Attrition.csv`; no ro
 | `StandardHours` | Constant 80 |
 | `EmployeeNumber` | Unique identifier, without portable predictive meaning |
 
-The remaining 30 predictors are documented in `src/config.py`. Numeric bounds express broad schema constraints, not fitted dataset extrema. Ordinal ratings are treated numerically; the equal-spacing assumption is a limitation.
+The remaining 30 predictors are documented in `src/attrition/config.py`. Numeric bounds express broad schema constraints, not fitted dataset extrema. Ordinal ratings are treated numerically; the equal-spacing assumption is a limitation.
 
 ## Project architecture
 
@@ -64,7 +64,7 @@ ibmhratt/
 ├── data/{raw,processed}/        # Canonical raw CSV and reproducible split/OOF manifests
 ├── .github/workflows/          # Cross-platform CI and tested image delivery to GHCR
 ├── notebooks/                  # Four executed narrative exploration notebooks
-├── src/
+├── src/attrition/              # Installable package (`pip install -e .`, included in requirements-dev.txt)
 │   ├── config.py               # Paths, schema, seed, and shared settings
 │   ├── data/                   # Loading, validation, training-only EDA
 │   ├── features/preprocess.py  # Fold-fitted transformations
@@ -97,23 +97,23 @@ Run commands from the repository root. Python **3.12** is the verified runtime.
 conda create -n ibmhratt python=3.12 pip -y
 conda activate ibmhratt
 python -m pip install -r requirements-dev.txt -c requirements-lock.txt
-python -m src.models.train
+python -m attrition.models.train
 python -m pytest -q
 ```
 
 Alternatively, `conda env create -f environment.yml` creates the named environment using the same package constraints. `requirements-serving.txt` declares API/dashboard dependencies; `requirements.txt` includes those plus training plots. The Docker runtime installs only serving dependencies; `requirements-dev.txt` adds testing, linting, and notebook tools; the lock file pins the packages used for the recorded results. Use the constraints above when reproducing them. Platforms may install different platform-specific transitive dependencies.
 
-If activation is inconvenient, use `conda run --no-capture-output -n ibmhratt python -m src.models.train`. In VS Code, select **Python (ibmhratt)** as the interpreter and notebook kernel. All project paths are derived from `src/config.py`, without machine-specific absolute paths.
+If activation is inconvenient, use `conda run --no-capture-output -n ibmhratt python -m attrition.models.train`. In VS Code, select **Python (ibmhratt)** as the interpreter and notebook kernel. All project paths are derived from `src/attrition/config.py`, without machine-specific absolute paths. `requirements-dev.txt` installs the `attrition` package in editable mode, so `python -m attrition...` commands work after installation; paths resolve relative to the checkout, so use an editable install or `PYTHONPATH=src` rather than a regular `pip install .`.
 
 Optional SHAP and executed notebooks:
 
 ```bash
 python -m pip install -r requirements-explain.txt -c requirements-lock.txt
-python -m src.models.train --with-shap
+python -m attrition.models.train --with-shap
 python -m scripts.execute_notebooks
 ```
 
-The four notebooks cover data understanding, EDA, feature engineering, and model experiments. Training must run first because notebooks display its generated figures and metrics. Reusable logic lives in `src/`; `scripts/build_notebooks.py` regenerates notebook cell sources and clears their outputs.
+The four notebooks cover data understanding, EDA, feature engineering, and model experiments. Training must run first because notebooks display its generated figures and metrics. Reusable logic lives in `src/attrition/`; `scripts/build_notebooks.py` regenerates notebook cell sources and clears their outputs.
 
 ## EDA highlights
 
@@ -217,7 +217,7 @@ Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -ContentType '
 Responses contain `prediction` (Yes/No), `attrition_probability`, `threshold`, and nullable `run_id`, populated from the actual model. Health responses also identify the loaded run; explicit legacy schema-1 artifacts return null. No mock probabilities are served. The Python module accepts a dictionary or DataFrame and returns `predicted_class`, `attrition_probability`, `decision_threshold`, and nullable `run_id`; a DataFrame yields a list in row order.
 
 ```bash
-python -m src.models.predict examples/employee.json
+python -m attrition.models.predict examples/employee.json
 ```
 
 The model loads once during API startup; restart after retraining. Requests log event/count information without raw profiles. Joblib artifacts must come from a trusted source because pickle-based loading can execute code. This local demo does not implement authentication or production access controls.
@@ -295,7 +295,7 @@ Training writes a new `models/runs/<UUID>/` directory containing `pipeline.jobli
 
 API startup resolves and loads one run for its process lifetime; restart it after retraining. Each dashboard rerun resolves one active run, and caches that immutable bundle by its UUID. It never combines a model from one run with reports from another. Checksums detect accidental corruption and mixing; they do not make untrusted joblib/pickle safe.
 
-The existing `reports/`, `data/processed/`, and `examples/` paths remain reproducible exports. Git reports omit runtime UUIDs. New training does not overwrite the old `models/attrition_pipeline.joblib`; that schema-1 file can still be loaded explicitly with `python -m src.models.predict examples/employee.json --model models/attrition_pipeline.joblib`. Retrain to migrate the default API/dashboard to complete bundles.
+The existing `reports/`, `data/processed/`, and `examples/` paths remain reproducible exports. Git reports omit runtime UUIDs. Schema-1 files can still be loaded explicitly with `python -m attrition.models.predict examples/employee.json --model <file>.joblib`. Pickles record module paths, so artifacts trained before the package moved from `src` to `attrition` fail with a clear "retrain" error; run `python -m attrition.models.train` to replace them.
 
 For the complete local quality gate:
 

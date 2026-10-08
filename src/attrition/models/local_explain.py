@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from src.models.predict import predict
+from attrition.models.predict import predict
 
 LOGGER = logging.getLogger(__name__)
 

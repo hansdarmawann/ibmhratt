@@ -15,12 +15,12 @@ import nbformat
 import numpy as np
 import pandas as pd
 
-from src.config import DATA_PATH, ROOT
-from src.data.load_data import load_data, split_data
-from src.models.artifacts import load_bundle
-from src.models.evaluate import evaluate_probabilities
-from src.models.local_explain import explained_probability
-from src.models.predict import predict
+from attrition.config import DATA_PATH, ROOT
+from attrition.data.load_data import load_data, split_data
+from attrition.models.artifacts import load_bundle
+from attrition.models.evaluate import evaluate_probabilities
+from attrition.models.local_explain import explained_probability
+from attrition.models.predict import predict
 
 LOGGER = logging.getLogger(__name__)
 

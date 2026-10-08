@@ -8,11 +8,11 @@ import pytest
 from sklearn.linear_model import LogisticRegression
 from threadpoolctl import threadpool_limits
 
-from src.config import FEATURE_COLUMNS
-from src.data.load_data import load_data, split_data
-from src.features.preprocess import build_pipeline
-from src.models.artifacts import publish_bundle, seal_bundle, write_json
-from src.models.evaluate import evaluate_probabilities
+from attrition.config import FEATURE_COLUMNS
+from attrition.data.load_data import load_data, split_data
+from attrition.features.preprocess import build_pipeline
+from attrition.models.artifacts import publish_bundle, seal_bundle, write_json
+from attrition.models.evaluate import evaluate_probabilities
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -6,8 +6,8 @@ from pathlib import Path
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from src.config import DATA_PATH, RANDOM_STATE, TARGET, TARGET_MAPPING, TEST_SIZE
-from src.data.validate_data import validate_data
+from attrition.config import DATA_PATH, RANDOM_STATE, TARGET, TARGET_MAPPING, TEST_SIZE
+from attrition.data.validate_data import validate_data
 
 LOGGER = logging.getLogger(__name__)
 
