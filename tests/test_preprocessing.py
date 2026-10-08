@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from src.config import CONSTANT_COLUMNS, ID_COLUMN
+from attrition.config import CONSTANT_COLUMNS, ID_COLUMN
 
 
 def test_excluded_features_and_readable_names(fitted_pipeline):

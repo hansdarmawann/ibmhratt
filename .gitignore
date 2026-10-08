@@ -14,6 +14,8 @@ models/*.json
 models/runs/
 models/.current-*.tmp
 .test-tmp/
+*.egg-info/
+build/
 data/processed/*
 !data/processed/.gitkeep
 .vscode/

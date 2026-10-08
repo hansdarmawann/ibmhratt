@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 from sklearn.inspection import permutation_importance
 
-from src.config import FEATURE_COLUMNS, RANDOM_STATE
-from src.models.local_explain import shap_values
-from src.visualization.plots import importance_plot, save_figure
+from attrition.config import FEATURE_COLUMNS, RANDOM_STATE
+from attrition.models.local_explain import shap_values
+from attrition.visualization.plots import importance_plot, save_figure
 
 LOGGER = logging.getLogger(__name__)
 

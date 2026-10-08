@@ -2,20 +2,20 @@
 
 import nbformat as nbf
 
-from src.config import ROOT
+from attrition.config import ROOT
 
 SETUP = """from pathlib import Path
 import sys
 ROOT = Path.cwd() if (Path.cwd() / 'src').exists() else Path.cwd().parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+if str(ROOT / 'src') not in sys.path:
+    sys.path.insert(0, str(ROOT / 'src'))
 import json
 import pandas as pd
 import numpy as np
 from IPython.display import display, Markdown, Image
-from src.config import FIGURES_DIR, METRICS_DIR, FEATURE_COLUMNS
-from src.data.load_data import load_data, split_data
-from src.data.explore import exploration_tables
+from attrition.config import FIGURES_DIR, METRICS_DIR, FEATURE_COLUMNS
+from attrition.data.load_data import load_data, split_data
+from attrition.data.explore import exploration_tables
 data = load_data()
 X_train, X_test, y_train, y_test = split_data(data)
 """
@@ -30,6 +30,9 @@ def write_notebook(filename: str, cells: list[tuple[str, str]]) -> None:
     }
     notebook.cells = [nbf.v4.new_markdown_cell(text) if kind == "md" else nbf.v4.new_code_cell(text)
                       for kind, text in cells]
+    # nbformat assigns random cell IDs; stable IDs keep regenerated notebooks diff-free.
+    for index, cell in enumerate(notebook.cells):
+        cell.id = f"cell-{index:02d}"
     directory = ROOT / "notebooks"
     directory.mkdir(exist_ok=True)
     nbf.write(notebook, directory / filename)
@@ -44,7 +47,7 @@ def main() -> None:
         ("code", SETUP),
         ("md", "## Structural audit\n\nSchema checks do not estimate preprocessing statistics. Missing predictors can "
          "be imputed later; missing labels, duplicate rows, invalid types, and unexpected training categories fail clearly."),
-        ("code", "from src.data.validate_data import data_audit\naudit = data_audit(data)\n"
+        ("code", "from attrition.data.validate_data import data_audit\naudit = data_audit(data)\n"
          "display(Markdown(f'**Shape:** {data.shape[0]:,} rows × {data.shape[1]} columns; '"
          "f'**duplicate rows:** {audit[\"duplicate_rows\"]}.'))\n"
          "display(pd.DataFrame({'dtype': data.dtypes.astype(str), 'missing': data.isna().sum(), 'unique': data.nunique()}))"),
@@ -56,7 +59,7 @@ def main() -> None:
          "display(Image(filename=str(FIGURES_DIR / 'attrition_distribution.png')))"),
         ("md", "## Investigate exclusions\n\nA unique ID does not have a portable predictive meaning. "
          "Constant columns cannot distinguish outcomes; confirm their values on training rows before removal."),
-        ("code", "from src.features.preprocess import feature_exclusions\n"
+        ("code", "from attrition.features.preprocess import feature_exclusions\n"
          "display(pd.Series(feature_exclusions(X_train), name='reason').to_frame())\n"
          "display(X_train[['EmployeeCount', 'Over18', 'StandardHours', 'EmployeeNumber']].nunique().to_frame('unique'))\n"
          "display(X_train[FEATURE_COLUMNS].describe(include='all').T)"),
@@ -111,7 +114,7 @@ def main() -> None:
          "and one-hot vocabulary are learned by the pipeline. Each CV clone will learn them independently. "
          "Unseen inference categories produce all-zero indicators for that field."),
         ("code", "from sklearn.linear_model import LogisticRegression\n"
-         "from src.features.preprocess import build_pipeline, feature_exclusions\n"
+         "from attrition.features.preprocess import build_pipeline, feature_exclusions\n"
          "pipeline = build_pipeline(X_train, LogisticRegression(max_iter=2000, random_state=42))\n"
          "pipeline.fit(X_train, y_train)\n"
          "processor = pipeline.named_steps['preprocess']\n"
@@ -143,7 +146,7 @@ def main() -> None:
          "ablation alongside the correlated-feature experiment."),
     ])
     write_notebook("04_model_experiments.ipynb", [
-        ("md", "# 04 · Model experiments and interpretation\n\nRun `python -m src.models.train --with-shap` first. "
+        ("md", "# 04 · Model experiments and interpretation\n\nRun `python -m attrition.models.train --with-shap` first. "
          "This notebook reads executed experiment artifacts; it does not tune models on test outcomes. "
          "Average precision is reported as PR-AUC/AP throughout, not trapezoidal PR area."),
         ("code", SETUP + "\nreport = json.loads((METRICS_DIR / 'model_metrics.json').read_text(encoding='utf-8'))\n"

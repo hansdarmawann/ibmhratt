@@ -5,8 +5,8 @@ import copy
 import joblib
 import pytest
 
-from src.models.artifacts import load_bundle, publish_bundle, read_json, seal_bundle, write_json
-from src.models.predict import load_pipeline, predict
+from attrition.models.artifacts import load_bundle, publish_bundle, read_json, seal_bundle, write_json
+from attrition.models.predict import load_pipeline, predict
 
 
 def test_bundle_roundtrip_and_atomic_switch(bundle_factory, tmp_path, employee):
@@ -69,14 +69,14 @@ def test_failed_pointer_write_keeps_old_run(bundle_factory, tmp_path, monkeypatc
 
 
 def test_failed_training_keeps_old_run(bundle_factory, tmp_path, monkeypatch):
-    from src.models.train import train
+    from attrition.models.train import train
 
     first = bundle_factory()
 
     def fail_loading(*args):
         raise ValueError("Invalid training data")
 
-    monkeypatch.setattr("src.models.train.load_data", fail_loading)
+    monkeypatch.setattr("attrition.models.train.load_data", fail_loading)
     with pytest.raises(ValueError, match="training data"):
         train(output_root=tmp_path)
     assert load_bundle(tmp_path / "models/current.json").run_id == first.run_id
@@ -91,4 +91,12 @@ def test_v2_requires_bundle_and_legacy_schema_is_validated(bundle_factory, fitte
     path = tmp_path / "invalid.joblib"
     joblib.dump(invalid, path)
     with pytest.raises(ValueError, match="threshold"):
+        load_pipeline(path)
+
+
+def test_artifact_from_renamed_package_asks_for_retraining(tmp_path):
+    # Protocol-0 pickle of a function at the pre-rename module path.
+    path = tmp_path / "old.joblib"
+    path.write_bytes(b"csrc.features.preprocess\nnormalize_missing\np0\n.")
+    with pytest.raises(ValueError, match="retrain"):
         load_pipeline(path)

@@ -1,21 +1,15 @@
 """Interactive educational dashboard using the same saved inference pipeline."""
 
 import json
-import sys
 from pathlib import Path
-
-# Streamlit executes this file with app/ on sys.path; keep imports portable.
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
 import streamlit as st
 
-from src.config import CATEGORIES, CURRENT_RUN, DISCLAIMER, NUMERIC_BOUNDS
-from src.models.artifacts import Bundle, active_run_path, load_bundle
-from src.models.local_explain import explain_profile
-from src.models.predict import predict
+from attrition.config import CATEGORIES, CURRENT_RUN, DISCLAIMER, NUMERIC_BOUNDS
+from attrition.models.artifacts import Bundle, active_run_path, load_bundle
+from attrition.models.local_explain import explain_profile
+from attrition.models.predict import predict
 
 st.set_page_config(page_title="Employee Attrition | Model Lab", page_icon="📊", layout="wide")
 st.title("Employee Attrition · Model Lab")
@@ -64,7 +58,7 @@ def render_dataset_overview(bundle: Bundle) -> None:
         st.write("Duplicate rows:", audit["duplicate_rows"])
         st.write("EmployeeNumber is excluded as an identifier. Verified constants carry no variation.")
     else:
-        st.info("Run `python -m src.models.train` to generate dataset and model reports.")
+        st.info("Run `python -m attrition.models.train` to generate dataset and model reports.")
     show_figure(bundle.figures_dir, "attrition_distribution.png", "Training partition only; Yes is the minority class.")
 
 
@@ -214,7 +208,7 @@ def main() -> None:
         run_path = active_run_path(CURRENT_RUN)
         bundle = cached_bundle(str(run_path), run_path.name)
     except FileNotFoundError:
-        st.info("Run `python -m src.models.train` to create a complete model/report bundle.")
+        st.info("Run `python -m attrition.models.train` to create a complete model/report bundle.")
         return
     except Exception:
         st.error("The active experiment bundle could not be verified. Retrain or restore a valid bundle.")

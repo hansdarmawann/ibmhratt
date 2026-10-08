@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.config import DATA_PATH, ROOT
-from src.data.load_data import load_data
-from src.data.validate_data import validate_data
+from attrition.config import DATA_PATH, ROOT
+from attrition.data.load_data import load_data
+from attrition.data.validate_data import validate_data
 
 
 def test_load_and_raw_dataset_integrity(raw_data):
@@ -60,7 +60,7 @@ def test_missing_predictors_are_reported(raw_data):
 
 
 def test_split_disjoint_stratified_and_reproducible(partitions, raw_data):
-    from src.data.load_data import split_data
+    from attrition.data.load_data import split_data
 
     X_train, X_test, y_train, y_test = partitions
     assert set(X_train.index).isdisjoint(X_test.index)

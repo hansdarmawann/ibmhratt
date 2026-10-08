@@ -6,7 +6,7 @@ import os
 import nbformat
 from nbclient import NotebookClient
 
-from src.config import ROOT
+from attrition.config import ROOT
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,7 +17,10 @@ def main() -> None:
     for path in sorted((ROOT / "notebooks").glob("*.ipynb")):
         LOGGER.info("Executing %s", path.name)
         notebook = nbformat.read(path, as_version=4)
-        client = NotebookClient(notebook, timeout=180, kernel_name="python3",
+        # Execution timestamps change on every run; omitting them keeps executed notebooks diff-free.
+        for cell in notebook.cells:
+            cell.metadata.pop("execution", None)
+        client = NotebookClient(notebook, timeout=180, kernel_name="python3", record_timing=False,
                                 resources={"metadata": {"path": str(ROOT)}})
         client.execute(env={**os.environ, "MPLBACKEND": "Agg"})
         nbformat.write(notebook, path)

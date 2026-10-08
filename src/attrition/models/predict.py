@@ -9,9 +9,9 @@ from typing import overload
 import pandas as pd
 from sklearn.pipeline import Pipeline
 
-from src.config import CONSTANT_COLUMNS, CURRENT_RUN, FEATURE_COLUMNS, ID_COLUMN
-from src.data.validate_data import validate_features
-from src.models.artifacts import load_bundle, load_legacy_pipeline
+from attrition.config import CONSTANT_COLUMNS, CURRENT_RUN, FEATURE_COLUMNS, ID_COLUMN
+from attrition.data.validate_data import validate_features
+from attrition.models.artifacts import load_bundle, load_legacy_pipeline
 
 LOGGER = logging.getLogger(__name__)
 

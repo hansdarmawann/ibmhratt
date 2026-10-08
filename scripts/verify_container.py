@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from uuid import uuid4
 
-from src.config import ROOT
+from attrition.config import ROOT
 
 
 def docker(*arguments: str) -> str:
@@ -44,9 +44,9 @@ def verify(image: str) -> None:
         assert result["prediction"] == expected
         assert result["run_id"] == health["run_id"]
         checks = (
-            "import os; from pathlib import Path; from src.models.artifacts import load_bundle; "
+            "import os; from pathlib import Path; from attrition.models.artifacts import load_bundle; "
             "assert os.getuid() != 0; assert not Path('/app/data/raw').exists(); "
-            "assert not Path('/app/src/models/train.py').exists(); "
+            "assert not Path('/app/src/attrition/models/train.py').exists(); "
             "assert load_bundle().run_id"
         )
         docker("exec", name, "python", "-c", checks)
