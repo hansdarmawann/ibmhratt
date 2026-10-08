@@ -13,6 +13,7 @@ from attrition.data.load_data import load_data, split_data
 from attrition.features.preprocess import build_pipeline
 from attrition.models.artifacts import publish_bundle, seal_bundle, write_json
 from attrition.models.evaluate import evaluate_probabilities
+from attrition.monitoring.drift import PROFILE_FILE, reference_profile
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -73,6 +74,7 @@ def bundle_factory(tmp_path, fitted_pipeline, partitions):
         write_json(report, directory / "metrics/model_metrics.json")
         write_json(X_train[FEATURE_COLUMNS].iloc[0].to_dict(), directory / "employee.json")
         write_json(X_train[FEATURE_COLUMNS].head(20).to_dict(orient="records"), directory / "background.json")
+        write_json(reference_profile(X_train[FEATURE_COLUMNS]), directory / PROFILE_FILE)
         bundle = seal_bundle(directory)
         if activate:
             publish_bundle(directory, tmp_path / "models/current.json")

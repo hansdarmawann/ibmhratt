@@ -45,6 +45,7 @@ from attrition.models.evaluate import (
 )
 from attrition.models.explain import explain_models, explain_shap
 from attrition.models.threshold import select_threshold, threshold_table
+from attrition.monitoring.drift import PROFILE_FILE, reference_profile
 from attrition.visualization.plots import save_calibration_plot, save_evaluation_plots
 
 LOGGER = logging.getLogger(__name__)
@@ -367,6 +368,8 @@ def write_bundle(paths: RunPaths, pipeline, metadata: dict, report: dict, parts:
     save_json(example, paths.run / "employee.json")
     background = parts.X_train[FEATURE_COLUMNS].sample(min(100, len(parts.X_train)), random_state=RANDOM_STATE)
     save_json(json.loads(background.to_json(orient="records")), paths.run / "background.json")
+    # Reference for input drift checks on new records; training rows only.
+    save_json(reference_profile(parts.X_train[FEATURE_COLUMNS]), paths.run / PROFILE_FILE)
     seal_bundle(paths.run)
     return result_text, example
 
