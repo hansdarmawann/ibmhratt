@@ -242,7 +242,7 @@ python -m scripts.verify_container --image employee-attrition-ml
 docker run --rm -p 127.0.0.1:8000:8000 employee-attrition-ml
 ```
 
-The multi-stage Python 3.12 slim image trains and verifies a bundle in its builder stage. The final stage installs constrained serving dependencies and copies the verified bundle and serving code. It contains no raw training dataset or training CLI and runs as an unprivileged user with a health check. Building requires a running Linux-container Docker engine and dependency-download access. SHAP is optional and omitted from the default image build.
+The multi-stage Python 3.12 slim image, pinned by digest, trains and verifies a bundle in its builder stage. The final stage installs constrained serving dependencies and copies the verified bundle and serving code. It contains no raw training dataset or training CLI and runs as an unprivileged user with a health check. Building requires a running Linux-container Docker engine and dependency-download access. SHAP is optional and omitted from the default image build.
 
 ## Testing and reproducibility
 
@@ -266,13 +266,16 @@ Model binaries and generated split/OOF CSVs are gitignored because they are repr
 
 ## CI/CD: GitHub Actions and GHCR
 
-[`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) runs on pull requests, pushes to `main`, version tags matching `v*`, and manual dispatch.
+[`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) runs on pull requests, pushes to `main`, version tags matching `v*`, manual dispatch, and weekly on Mondays so newly published advisories surface even without code changes. Scheduled runs never publish.
 
 - **CI:** Python 3.12 on Ubuntu and Windows, constrained dependency installation, `pip check`, Ruff lint, mypy type checking, all pytest tests with coverage, fresh training with SHAP measured in the same coverage database, a combined 80% coverage gate, a check that the committed README and `reports/results.md` match the fresh run, a tolerant comparison of every committed metrics file and figure name (`python -m scripts.compare_reports`), notebook execution, and delivery verification including live API/dashboard startup. Test results and generated model/report artifacts are retained for 14 days.
-- **Container validation:** after both CI jobs pass, build the Docker image and test its real `/health` and `/predict` endpoints. Pull requests and manual runs build and test without publishing.
+- **Dependency audit:** `pip-audit` checks every package pinned in `requirements-lock.txt` against known vulnerabilities and fails on any finding.
+- **Container validation:** after both CI jobs and the audit pass, build the Docker image, test its real `/health` and `/predict` endpoints, and scan it with Trivy, failing on fixable high or critical vulnerabilities in OS or Python packages. Pull requests, manual runs, and scheduled runs build and test without publishing.
 - **CD (continuous delivery):** after container validation passes on a push to `main` or a `v*` tag, publish that same tested image to `ghcr.io/<owner>/<repository>`. Main publishes `latest` and a commit SHA tag; version tags publish the Git tag and a commit SHA tag. This delivers a container image; running it on a server is a separate deployment step.
 
-Publishing uses the workflow's `GITHUB_TOKEN` with job-scoped `packages: write`; no personal access token or registry password secret is required. Enable GitHub Actions in the repository and allow the workflow to create packages. Existing GHCR packages must grant this repository Actions access. Forks validate containers but skip publishing. See [GitHub's Docker publishing documentation](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images).
+Publishing uses the workflow's `GITHUB_TOKEN` with job-scoped `packages: write`; no personal access token or registry password secret is required. Enable GitHub Actions in the repository and allow the workflow to create packages. Existing GHCR packages must grant this repository Actions access. Forks validate containers but skip publishing.
+
+Supply-chain pinning: every third-party action is pinned to a full commit SHA (with its version in a comment), the Python base image and the Trivy image are pinned by digest, and `pip-audit` is pinned by version. Dependabot proposes updates to all of them; GitHub Actions updates arrive as one grouped pull request. See [GitHub's Docker publishing documentation](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images).
 
 For this repository, the main-branch image can be run with:
 
