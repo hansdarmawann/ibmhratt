@@ -106,6 +106,23 @@ def render_model_performance(bundle: Bundle) -> None:
     st.caption("Top 5%, 10%, and 20% by score, rounding counts up. Ties preserve row order. "
                "Training OOF and final holdout are separate; these are not intervention recommendations.")
     show_table(metrics_dir, "capacity_metrics.csv")
+    nested = report.get("nested_cv")
+    if nested:
+        st.subheader("Nested cross-validation (diagnostic)")
+        fixed, tuned = nested["procedures"]["fixed"], nested["procedures"]["tuned"]
+        st.caption(f"The whole selection procedure re-run inside {nested['outer_folds']} outer training folds: "
+                   f"AP {fixed['pr_auc']['mean']:.3f} ± {fixed['pr_auc']['std']:.3f} as served, "
+                   f"{tuned['pr_auc']['mean']:.3f} ± {tuned['pr_auc']['std']:.3f} with small prespecified grids. "
+                   "The served model is unchanged.")
+        show_table(metrics_dir, "nested_cv_folds.csv")
+    engineering = report.get("feature_engineering_ablation")
+    if engineering:
+        st.subheader("Engineered features (diagnostic)")
+        st.write(f"Logistic CV AP change: {engineering['cv_ap_change']:+.3f}, higher in "
+                 f"{engineering['folds_improved']} of 5 folds. Adoption rule ({engineering['adoption_rule']}): "
+                 f"{'met' if engineering['meets_adoption_rule'] else 'not met'}. Not used by the served model.")
+        st.dataframe(pd.DataFrame(engineering["features"].items(), columns=["feature", "formula"]),
+                     hide_index=True, width="stretch")
 
 
 def profile_form(sample: dict) -> tuple[dict, bool]:
@@ -184,6 +201,8 @@ def render_responsible_ml(bundle: Bundle) -> None:
     if bundle.report:
         st.write(f"Training CV AP change without the three sensitive attributes: "
                  f"{bundle.report['sensitive_ablation']['cv_ap_change']:+.3f}.")
+        st.caption("Lower/upper columns are 95% stratified bootstrap intervals within each group for the frozen "
+                   "model and threshold; empty intervals mean the group has no rows of that class.")
         show_table(bundle.metrics_dir, "subgroup_metrics.csv")
     st.write("Subgroup estimates have small denominators and substantial uncertainty. These descriptive slices "
              "do not establish fairness. Require human oversight, privacy controls, calibration, temporal "

@@ -34,6 +34,7 @@ from attrition.config import (
 from attrition.data.explore import save_exploration
 from attrition.data.load_data import load_data, split_data
 from attrition.data.validate_data import data_audit
+from attrition.features.engineering import ENGINEERED_FEATURES
 from attrition.features.preprocess import build_pipeline, feature_exclusions
 from attrition.models.artifacts import publish_bundle, seal_bundle
 from attrition.models.diagnostics import calibration_diagnostics, capacity_metrics, stability_diagnostics
@@ -44,12 +45,15 @@ from attrition.models.evaluate import (
     subgroup_metrics,
 )
 from attrition.models.explain import explain_models, explain_shap
+from attrition.models.nested import OUTER_FOLDS, PARAM_GRIDS, TUNING_FOLDS, nested_cv, nested_summary
 from attrition.models.threshold import select_threshold, threshold_table
 from attrition.monitoring.drift import PROFILE_FILE, reference_profile
 from attrition.visualization.plots import save_calibration_plot, save_evaluation_plots
 
 LOGGER = logging.getLogger(__name__)
 RESULTS_START, RESULTS_END = "<!-- RESULTS:START -->", "<!-- RESULTS:END -->"
+# Prespecified rule for the engineered-feature ablation (reported, never applied automatically).
+ENGINEERING_MIN_GAIN, ENGINEERING_MIN_FOLDS = 0.01, 4
 CI_LABELS = {"pr_auc": "AP", "roc_auc": "ROC-AUC", "precision": "precision", "recall": "recall", "f1": "F1"}
 
 
@@ -131,7 +135,7 @@ def markdown_results(report: dict) -> str:
         stability = report["stability_diagnostics"]
         capacity = next(row for row in report["capacity_metrics"]
                         if row["partition"] == "holdout" and row["capacity_fraction"] == 0.1)
-        rows += ["", "### Three additional findings", "",
+        rows += ["", "### Additional findings", "",
                  f"1. Training outer-OOF Brier score: uncalibrated **{raw['brier_score']:.3f}**, "
                  f"sigmoid **{sigmoid['brier_score']:.3f}**; log loss "
                  f"**{raw['log_loss']:.3f}** versus **{sigmoid['log_loss']:.3f}**. "
@@ -143,6 +147,19 @@ def markdown_results(report: dict) -> str:
                  f"3. The highest-scored 10% of holdout profiles ({capacity['selected_count']} rows) "
                  f"have precision **{capacity['precision']:.3f}**, recall **{capacity['recall']:.3f}**, "
                  f"and lift **{capacity['lift']:.2f}**. This is a capacity diagnostic, not an intervention policy."]
+    if "nested_cv" in report:
+        nested = report["nested_cv"]
+        fixed, tuned = nested["procedures"]["fixed"], nested["procedures"]["tuned"]
+        engineering = report["feature_engineering_ablation"]
+        rows += [f"4. Nested CV ({nested['outer_folds']} outer training folds) estimates the whole selection "
+                 f"procedure at AP **{fixed['pr_auc']['mean']:.3f} ± {fixed['pr_auc']['std']:.3f}**, versus "
+                 f"**{nested['selected_model_cv_ap']:.3f}** ordinary CV AP for the selected model. Tuning small "
+                 f"prespecified grids gives **{tuned['pr_auc']['mean']:.3f} ± {tuned['pr_auc']['std']:.3f}**. "
+                 "Both are diagnostics; the served model is unchanged.",
+                 f"5. Five prespecified engineered features change logistic CV AP by "
+                 f"**{engineering['cv_ap_change']:+.3f}** (higher in {engineering['folds_improved']} of 5 folds); "
+                 f"the prespecified adoption rule is **{'met' if engineering['meets_adoption_rule'] else 'not met'}**. "
+                 "They are not used by the served model."]
     return "\n".join(rows) + "\n"
 
 
@@ -198,6 +215,15 @@ class OperatingPoint:
 
 
 @dataclass(frozen=True)
+class Diagnostics:
+    """Training-only diagnostics; none feeds back into model selection."""
+
+    calibration_scores: pd.DataFrame
+    repeat_choices: pd.DataFrame
+    nested: dict
+
+
+@dataclass(frozen=True)
 class HoldoutResults:
     probabilities: dict
     at_default_threshold: dict
@@ -227,8 +253,24 @@ def prepare_data(data_path: Path, paths: RunPaths) -> Partitions:
     return Partitions(X_train, X_test, y_train, y_test)
 
 
-def compare_models(parts: Partitions, cv, paths: RunPaths) -> tuple[dict, dict]:
-    """Cross-validate candidates plus the fixed ablations; return candidates and all summaries."""
+def engineering_ablation(summaries: dict, fold_metrics: pd.DataFrame) -> dict:
+    """Paired fold comparison with the same logistic model. Diagnostic only: never adopted in this run."""
+    def fold_ap(model: str) -> np.ndarray:
+        return fold_metrics.loc[fold_metrics["model"] == model, "pr_auc"].to_numpy()
+
+    change = (summaries["logistic_engineered_features"]["pr_auc"]["mean"]
+              - summaries["logistic_regression"]["pr_auc"]["mean"])
+    improved = int((fold_ap("logistic_engineered_features") > fold_ap("logistic_regression")).sum())
+    return {"features": ENGINEERED_FEATURES, "cv_ap_change": change, "folds_improved": improved,
+            "adoption_rule": f"CV AP gain of at least {ENGINEERING_MIN_GAIN} and higher AP in at least "
+                             f"{ENGINEERING_MIN_FOLDS} of {CV_FOLDS} folds",
+            "meets_adoption_rule": bool(change >= ENGINEERING_MIN_GAIN and improved >= ENGINEERING_MIN_FOLDS),
+            "adopted": False,
+            "note": "Even when the rule is met, adoption needs validation on data not used for these choices."}
+
+
+def compare_models(parts: Partitions, cv, paths: RunPaths) -> tuple[dict, dict, dict]:
+    """Cross-validate candidates plus the fixed ablations; return candidates, summaries, engineering ablation."""
     pipelines = candidate_pipelines(parts.X_train)
     summaries = {}
     fold_tables = []
@@ -237,14 +279,16 @@ def compare_models(parts: Partitions, cv, paths: RunPaths) -> tuple[dict, dict]:
         summaries[name], folds = cross_validation_metrics(pipeline, parts.X_train, parts.y_train, cv)
         fold_tables.append(folds.assign(model=name))
     # Fixed diagnostic experiments, not extra candidates for final selection.
-    for name, excluded in [("logistic_without_sensitive", SENSITIVE_COLUMNS),
-                            ("logistic_reduced_correlations", REDUNDANT_COLUMNS)]:
+    for name, excluded, engineered in [("logistic_without_sensitive", SENSITIVE_COLUMNS, False),
+                                       ("logistic_reduced_correlations", REDUNDANT_COLUMNS, False),
+                                       ("logistic_engineered_features", [], True)]:
         estimator = LogisticRegression(C=1.0, max_iter=2000, random_state=RANDOM_STATE)
-        pipeline = build_pipeline(parts.X_train, estimator, exclude=excluded)
+        pipeline = build_pipeline(parts.X_train, estimator, exclude=excluded, engineered=engineered)
         summaries[name], folds = cross_validation_metrics(pipeline, parts.X_train, parts.y_train, cv)
         fold_tables.append(folds.assign(model=name))
-    pd.concat(fold_tables).to_csv(paths.metrics / "cv_fold_metrics.csv")
-    return pipelines, summaries
+    fold_metrics = pd.concat(fold_tables)
+    fold_metrics.to_csv(paths.metrics / "cv_fold_metrics.csv")
+    return pipelines, summaries, engineering_ablation(summaries, fold_metrics)
 
 
 def choose_operating_point(pipelines: dict, summaries: dict, parts: Partitions, cv,
@@ -263,8 +307,8 @@ def choose_operating_point(pipelines: dict, summaries: dict, parts: Partitions, 
 
 
 def training_diagnostics(pipelines: dict, summaries: dict, point: OperatingPoint, parts: Partitions,
-                         paths: RunPaths) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Calibration and seed stability on training rows; neither changes the served model."""
+                         paths: RunPaths) -> Diagnostics:
+    """Calibration, seed stability, and nested CV on training rows; none changes the served model."""
     LOGGER.info("Running training-only calibration and stability diagnostics")
     calibration_scores, calibration_bins, calibration_oof = calibration_diagnostics(
         pipelines[point.selected], parts.X_train, parts.y_train)
@@ -277,7 +321,9 @@ def training_diagnostics(pipelines: dict, summaries: dict, point: OperatingPoint
         baseline=({name: summaries[name] for name in pipelines}, point.selected, point.oof))
     repeat_scores.to_csv(paths.metrics / "stability_comparison.csv", index=False)
     repeat_choices.to_csv(paths.metrics / "stability_selections.csv", index=False)
-    return calibration_scores, repeat_choices
+    nested_folds = nested_cv(pipelines, parts.X_train, parts.y_train, select_model)
+    nested_folds.to_csv(paths.metrics / "nested_cv_folds.csv", index=False)
+    return Diagnostics(calibration_scores, repeat_choices, nested_summary(nested_folds))
 
 
 def evaluate_holdout(pipelines: dict, point: OperatingPoint, parts: Partitions, paths: RunPaths) -> HoldoutResults:
@@ -321,8 +367,9 @@ def build_metadata(run_id: str, point: OperatingPoint, parts: Partitions, data_p
 
 
 def build_report(metadata: dict, summaries: dict, point: OperatingPoint, holdout: HoldoutResults,
-                 calibration_scores: pd.DataFrame, repeat_choices: pd.DataFrame, shap_status: dict) -> dict:
+                 diagnostics: Diagnostics, engineering: dict, shap_status: dict) -> dict:
     intervals = holdout.intervals
+    calibration_scores, repeat_choices = diagnostics.calibration_scores, diagnostics.repeat_choices
     return {
         **metadata, "metric_definition": "pr_auc is sklearn average_precision_score",
         "cross_validation": summaries, "holdout_at_0_5": holdout.at_default_threshold,
@@ -352,6 +399,16 @@ def build_report(metadata: dict, summaries: dict, point: OperatingPoint, holdout
         "correlation_ablation": {"excluded": REDUNDANT_COLUMNS,
                                  "cv_ap_change": summaries["logistic_reduced_correlations"]["pr_auc"]["mean"]
                                  - summaries["logistic_regression"]["pr_auc"]["mean"]},
+        "feature_engineering_ablation": engineering,
+        "nested_cv": {
+            "method": "training partition only; the full selection procedure runs inside each outer training fold",
+            "outer_folds": OUTER_FOLDS, "inner_folds": {"fixed": CV_FOLDS, "tuned": TUNING_FOLDS},
+            "param_grids": {name: {key.removeprefix("model__"): values for key, values in grid.items()}
+                            for name, grid in PARAM_GRIDS.items()},
+            "selected_model_cv_ap": summaries[point.selected]["pr_auc"]["mean"],
+            "procedures": diagnostics.nested,
+            "served_model_changed": False,
+        },
     }
 
 
@@ -399,14 +456,14 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
     LOGGER.info("Model training started")
     parts = prepare_data(data_path, paths)
     cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_STATE)
-    pipelines, summaries = compare_models(parts, cv, paths)
+    pipelines, summaries, engineering = compare_models(parts, cv, paths)
     point = choose_operating_point(pipelines, summaries, parts, cv, paths)
-    calibration_scores, repeat_choices = training_diagnostics(pipelines, summaries, point, parts, paths)
+    diagnostics = training_diagnostics(pipelines, summaries, point, parts, paths)
     holdout = evaluate_holdout(pipelines, point, parts, paths)
     shap_status = (explain_shap(pipelines[point.selected], parts.X_train, parts.X_test, paths.metrics, paths.figures)
                    if with_shap else {"status": "not_requested", "enable": "python -m attrition.models.train --with-shap"})
     metadata = build_metadata(run_id, point, parts, data_path)
-    report = build_report(metadata, summaries, point, holdout, calibration_scores, repeat_choices, shap_status)
+    report = build_report(metadata, summaries, point, holdout, diagnostics, engineering, shap_status)
     result_text, example = write_bundle(paths, pipelines[point.selected], metadata, report, parts)
     publish_bundle(paths.run, output_root / "models/current.json")
     LOGGER.info("Validated run %s is now active", run_id)

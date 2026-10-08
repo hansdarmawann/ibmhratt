@@ -97,8 +97,38 @@ def bootstrap_intervals(y_true, probabilities, threshold: float, *, n_boot: int 
     ])
 
 
-def subgroup_metrics(X: pd.DataFrame, y: pd.Series, probabilities, threshold: float) -> pd.DataFrame:
-    """Descriptive holdout slices with denominators; not a fairness certification."""
+def group_rate_intervals(y, flagged, rng, *, n_boot: int, confidence: float) -> dict:
+    """Stratified percentile bootstrap of recall, false-positive rate, and selection rate in one group.
+
+    Positives and negatives are resampled separately, so their counts stay fixed;
+    a rate without any rows of its class has no interval.
+    """
+    y, flagged = np.asarray(y).astype(bool), np.asarray(flagged).astype(float)
+    positives, negatives = flagged[y], flagged[~y]
+
+    def resampled_rates(values):
+        if not len(values):
+            return None
+        return values[rng.integers(0, len(values), size=(n_boot, len(values)))].mean(axis=1)
+
+    recall, fpr = resampled_rates(positives), resampled_rates(negatives)
+    selected = sum(rates * len(values) for rates, values in [(recall, positives), (fpr, negatives)]
+                   if rates is not None) / len(y)
+    alpha = (1 - confidence) / 2
+    result = {}
+    for name, replicates in [("recall", recall), ("false_positive_rate", fpr), ("selection_rate", selected)]:
+        bounds = (None, None) if replicates is None else np.quantile(replicates, [alpha, 1 - alpha])
+        result[f"{name}_lower"], result[f"{name}_upper"] = (None if bound is None else float(bound) for bound in bounds)
+    return result
+
+
+def subgroup_metrics(X: pd.DataFrame, y: pd.Series, probabilities, threshold: float, *, n_boot: int = 1000,
+                     confidence: float = 0.95, seed: int = RANDOM_STATE) -> pd.DataFrame:
+    """Descriptive holdout slices with denominators and bootstrap intervals; not a fairness certification.
+
+    Intervals cover sampling variability within each group for the frozen model and threshold only.
+    """
+    rng = np.random.default_rng(seed)
     groups = X[["Gender", "MaritalStatus"]].copy()
     groups["AgeBand"] = pd.cut(X["Age"], [17, 29, 39, 49, 100],
                                labels=["18-29", "30-39", "40-49", "50+"])
@@ -115,5 +145,7 @@ def subgroup_metrics(X: pd.DataFrame, y: pd.Series, probabilities, threshold: fl
                 "false_positive_rate": metrics["false_positives"] / negatives if negatives else None,
                 "selection_rate": float((np.asarray(probabilities)[mask] >= threshold).mean()),
                 "precision": metrics["precision"],
+                **group_rate_intervals(y.to_numpy()[mask], np.asarray(probabilities)[mask] >= threshold, rng,
+                                       n_boot=n_boot, confidence=confidence),
             })
     return pd.DataFrame(rows)
