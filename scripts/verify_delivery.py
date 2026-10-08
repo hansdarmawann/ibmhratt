@@ -21,6 +21,7 @@ from attrition.models.artifacts import load_bundle
 from attrition.models.evaluate import evaluate_probabilities
 from attrition.models.local_explain import explained_probability
 from attrition.models.predict import predict
+from attrition.monitoring.drift import PROFILE_FILE, drift_report
 
 LOGGER = logging.getLogger(__name__)
 
@@ -108,7 +109,11 @@ def main() -> None:
             if cell.cell_type == "code":
                 assert cell.execution_count is not None, f"Unexecuted cell in {path.name}"
                 assert all(output.output_type != "error" for output in cell.outputs)
-    LOGGER.info("Saved pipeline metrics, OOF coverage, SHAP additivity, and four notebooks verified")
+    # The training profile must describe the training rows; the holdout is a fresh sample of the same data.
+    profile = json.loads((bundle.path / PROFILE_FILE).read_text(encoding="utf-8"))
+    assert profile["rows"] == len(X_train)
+    assert drift_report(X_test, profile)["psi"].lt(0.25).all()
+    LOGGER.info("Saved pipeline metrics, OOF coverage, SHAP additivity, drift profile, and four notebooks verified")
     example = json.loads((bundle.path / "employee.json").read_text(encoding="utf-8"))
     with local_service(["uvicorn", "app.api:app", "--host", "127.0.0.1", "--port", "{port}"],
                        "/health") as base_url:
