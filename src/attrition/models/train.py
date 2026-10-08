@@ -340,7 +340,8 @@ def evaluate_holdout(pipelines: dict, point: OperatingPoint, parts: Partitions, 
                           capacity_metrics(parts.y_test, selected_probabilities, partition="holdout")],
                          ignore_index=True)
     capacity.to_csv(paths.metrics / "capacity_metrics.csv", index=False)
-    pd.DataFrame(at_default).T.drop(columns="confusion_matrix").to_csv(paths.metrics / "model_comparison.csv")
+    pd.DataFrame(at_default).T.drop(columns="confusion_matrix").to_csv(paths.metrics / "model_comparison.csv",
+                                                                       index_label="model")
     save_evaluation_plots(parts.y_test, probabilities, point.selected, selected_metrics, point.thresholds,
                           paths.figures)
     explain_models(pipelines, point.selected, parts.X_test, parts.y_test, paths.metrics, paths.figures)
