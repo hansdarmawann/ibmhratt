@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-.PHONY: install train explain lint typecheck test coverage check api app notebooks
+.PHONY: install train explain lint typecheck test coverage check api app notebooks prune
 install:
 	$(PYTHON) -m pip install -r requirements-dev.txt -c requirements-lock.txt
 train:
@@ -24,3 +24,5 @@ app:
 	$(PYTHON) -m streamlit run app/streamlit_app.py
 notebooks:
 	$(PYTHON) -m scripts.execute_notebooks
+prune:
+	$(PYTHON) -m attrition.models.prune --keep 5

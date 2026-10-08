@@ -258,7 +258,7 @@ The pytest suite includes unit tests and integration tests. Tests cover loading/
 
 After training and notebook execution, `scripts.verify_delivery` also checks the delivered artifact against its recorded metrics and bootstrap point estimates, OOF coverage, SHAP additivity, executed notebook cells, and actual loopback HTTP startup/prediction for both services. Its temporary servers are stopped automatically.
 
-`make install`, `make train`, `make explain`, `make lint`, `make typecheck`, `make test`, `make coverage`, `make check`, `make api`, `make app`, and `make notebooks` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
+`make install`, `make train`, `make explain`, `make lint`, `make typecheck`, `make test`, `make coverage`, `make check`, `make api`, `make app`, `make notebooks`, and `make prune` wrap the documented Python commands when Make is available. Activate `ibmhratt` first; PowerShell users can use the Python commands directly.
 
 Optional Git hooks run Ruff, mypy, and basic file checks before each commit, using the activated environment's pinned tools: `python -m pip install pre-commit`, then `pre-commit install`. Generated reports and notebooks are excluded; CI compares them with a fresh run instead.
 
@@ -298,6 +298,8 @@ The prediction form explains the profile just submitted. Contributions describe 
 Training writes a new `models/runs/<UUID>/` directory containing `pipeline.joblib`, `metadata.json`, metrics, figures, processed diagnostics, `employee.json`, `background.json`, and a checksum manifest. The pipeline and report use schema version 2 and the same `run_id`. All files and metadata are verified before atomically replacing `models/current.json`. Failed training or publication leaves the previous active run available.
 
 API startup resolves and loads one run for its process lifetime; restart it after retraining. Each dashboard rerun resolves one active run, and caches that immutable bundle by its UUID. It never combines a model from one run with reports from another. Checksums detect accidental corruption and mixing; they do not make untrusted joblib/pickle safe.
+
+Each training run adds a bundle. `python -m attrition.models.prune --keep 5` removes all but the five most recently written runs and never removes the active run; add `--dry-run` to list what would be removed. Only UUID-named run folders are considered, and an unverifiable `current.json` stops pruning without deleting anything. A running API keeps serving the bundle it loaded at startup.
 
 The existing `reports/`, `data/processed/`, and `examples/` paths remain reproducible exports. Git reports omit runtime UUIDs. Schema-1 files can still be loaded explicitly with `python -m attrition.models.predict examples/employee.json --model <file>.joblib`. Pickles record module paths, so artifacts trained before the package moved from `src` to `attrition` fail with a clear "retrain" error; run `python -m attrition.models.train` to replace them.
 
