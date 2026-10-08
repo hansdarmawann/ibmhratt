@@ -6,9 +6,11 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from uuid import uuid4
 
-from attrition.config import ROOT
+# Standard library only: CI runs this with the runner's Python, without project dependencies.
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def docker(*arguments: str) -> str:
