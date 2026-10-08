@@ -30,6 +30,9 @@ def write_notebook(filename: str, cells: list[tuple[str, str]]) -> None:
     }
     notebook.cells = [nbf.v4.new_markdown_cell(text) if kind == "md" else nbf.v4.new_code_cell(text)
                       for kind, text in cells]
+    # nbformat assigns random cell IDs; stable IDs keep regenerated notebooks diff-free.
+    for index, cell in enumerate(notebook.cells):
+        cell.id = f"cell-{index:02d}"
     directory = ROOT / "notebooks"
     directory.mkdir(exist_ok=True)
     nbf.write(notebook, directory / filename)
