@@ -1,5 +1,5 @@
-# Runtime plus testing, coverage, linting, and notebook execution.
--r requirements.txt
+# Training plus optional-explainer tests, coverage, linting, and notebooks.
+-r requirements-explain.txt
 pytest>=8.3,<10
 pytest-cov>=6.0,<8
 httpx>=0.28,<1

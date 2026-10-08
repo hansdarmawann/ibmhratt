@@ -1,18 +1,32 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MPLCONFIGDIR=/tmp/matplotlib
 
 WORKDIR /app
-COPY requirements.txt requirements-lock.txt ./
+COPY requirements.txt requirements-serving.txt requirements-lock.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -c requirements-lock.txt
 COPY src ./src
-COPY app ./app
 COPY data/raw ./data/raw
 COPY README.md ./README.md
-# Train inside the image so the artifact and runtime use the same package versions.
+# Training publishes only a completely verified bundle.
 RUN python -m src.models.train
+RUN python -c "from src.models.artifacts import load_bundle; load_bundle()"
+
+FROM python:3.12-slim AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MPLCONFIGDIR=/tmp/matplotlib
+WORKDIR /app
+COPY requirements-serving.txt requirements-lock.txt ./
+RUN pip install --no-cache-dir -r requirements-serving.txt -c requirements-lock.txt
+COPY src/__init__.py src/config.py ./src/
+COPY src/data/__init__.py src/data/validate_data.py ./src/data/
+COPY src/features ./src/features
+COPY src/models/__init__.py src/models/artifacts.py src/models/predict.py src/models/local_explain.py ./src/models/
+COPY app ./app
+COPY --from=builder /app/models ./models
 RUN useradd --create-home appuser
 USER appuser
 EXPOSE 8000

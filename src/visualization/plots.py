@@ -104,3 +104,16 @@ def importance_plot(table: pd.DataFrame, value: str, path: Path, title: str) -> 
     ax.barh(selected["feature"], selected[value], color=np.where(selected[value] >= 0, "#357b89", "#d27a43"))
     ax.set(title=title, xlabel=value.replace("_", " "))
     save_figure(fig, path)
+
+
+def save_calibration_plot(bins: pd.DataFrame, directory: Path) -> None:
+    """Reliability on outer-OOF training predictions; empty bins stay in the CSV."""
+    fig, ax = plt.subplots(figsize=(7, 6))
+    for method, table in bins.groupby("method", sort=False):
+        observed = table.loc[table.n > 0]
+        ax.plot(observed.mean_probability, observed.observed_rate, marker="o", label=method)
+    ax.plot([0, 1], [0, 1], "--", color="grey", label="Perfect calibration")
+    ax.set(xlabel="Mean predicted probability", ylabel="Observed attrition rate",
+           xlim=(0, 1), ylim=(0, 1), title="Training outer-OOF reliability (10 equal-width bins)")
+    ax.legend()
+    save_figure(fig, directory / "calibration_reliability.png")

@@ -9,6 +9,7 @@ import pandas as pd
 from sklearn.inspection import permutation_importance
 
 from src.config import FEATURE_COLUMNS, RANDOM_STATE
+from src.models.local_explain import shap_values
 from src.visualization.plots import importance_plot, save_figure
 
 LOGGER = logging.getLogger(__name__)
@@ -46,26 +47,15 @@ def explain_models(pipelines: dict, selected: str, X_test, y_test,
 def explain_shap(pipeline, X_train, X_test, metrics_dir: Path, figures_dir: Path) -> dict:
     """Optionally explain up to 60 holdout observations; no SHAP core dependency.
 
-    Linear explanations are in log-odds. Tree output units are documented as
-    model output because they vary by estimator and explainer.
+    Linear explanations are in log-odds. Tree explanations explicitly use
+    positive-class probability; both paths check additivity in their own units.
     """
     try:
         import shap
 
-        preprocessor = pipeline[:-1]
-        estimator = pipeline.named_steps["model"]
         names = pipeline.named_steps["preprocess"].get_feature_names_out()
-        background = preprocessor.transform(X_train.sample(min(100, len(X_train)), random_state=RANDOM_STATE))
-        samples = preprocessor.transform(X_test.iloc[:60])
-        if hasattr(estimator, "coef_"):
-            explainer = shap.LinearExplainer(estimator, background, feature_names=names)
-            units = "log-odds of Attrition=Yes"
-        else:
-            explainer = shap.TreeExplainer(estimator, data=background, feature_names=names)
-            units = "raw model output for Attrition=Yes"
-        explanation = explainer(samples)
-        if explanation.values.ndim == 3:
-            explanation = explanation[:, :, 1]
+        background = X_train.sample(min(100, len(X_train)), random_state=RANDOM_STATE)
+        explanation, units, samples = shap_values(pipeline, background, X_test.iloc[:60])
         importance = pd.DataFrame({"feature": names,
                                    "mean_absolute_shap": np.abs(explanation.values).mean(axis=0)})
         importance.sort_values("mean_absolute_shap", ascending=False).to_csv(
