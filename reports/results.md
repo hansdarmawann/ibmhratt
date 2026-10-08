@@ -25,8 +25,10 @@ Selection uses only five-fold training average precision. Prefer unweighted, the
 
 OOF threshold scores reuse the training folds used for model comparison and are selection diagnostics, not an unbiased performance estimate. The holdout is evaluated after choices are frozen. There are 47 positive holdout examples, so small count changes materially affect recall.
 
-### Three additional findings
+### Additional findings
 
 1. Training outer-OOF Brier score: uncalibrated **0.090**, sigmoid **0.093**; log loss **0.321** versus **0.321**. Calibration is diagnostic only; serving probabilities are unchanged.
 2. Across training CV seeds 42, 43, and 44, selections were **{'logistic_regression': 3}**, with thresholds from **0.15** to **0.20**. Seed 42 remains the main experiment.
 3. The highest-scored 10% of holdout profiles (30 rows) have precision **0.633**, recall **0.404**, and lift **3.96**. This is a capacity diagnostic, not an intervention policy.
+4. Nested CV (5 outer training folds) estimates the whole selection procedure at AP **0.651 ± 0.061**, versus **0.651** ordinary CV AP for the selected model. Tuning small prespecified grids gives **0.646 ± 0.048**. Both are diagnostics; the served model is unchanged.
+5. Five prespecified engineered features change logistic CV AP by **+0.014** (higher in 4 of 5 folds); the prespecified adoption rule is **met**. They are not used by the served model.

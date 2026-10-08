@@ -205,6 +205,28 @@
         "mean": 0.5493858216611184,
         "std": 0.0784424835634043
       }
+    },
+    "logistic_engineered_features": {
+      "roc_auc": {
+        "mean": 0.8436650771676153,
+        "std": 0.025720136358427625
+      },
+      "pr_auc": {
+        "mean": 0.6652746597820582,
+        "std": 0.05800996955677345
+      },
+      "precision": {
+        "mean": 0.7817433155080213,
+        "std": 0.0848437785360237
+      },
+      "recall": {
+        "mean": 0.4789473684210527,
+        "std": 0.08051083442514925
+      },
+      "f1": {
+        "mean": 0.59001443001443,
+        "std": 0.07381142944958582
+      }
     }
   },
   "holdout_at_0_5": {
@@ -495,5 +517,127 @@
       "YearsWithCurrManager"
     ],
     "cv_ap_change": -0.004728759919792713
+  },
+  "feature_engineering_ablation": {
+    "features": {
+      "IncomePerJobLevel": "MonthlyIncome / JobLevel",
+      "CompanyShareOfCareer": "YearsAtCompany / (TotalWorkingYears + 1)",
+      "YearsPerPriorEmployer": "TotalWorkingYears / (NumCompaniesWorked + 1)",
+      "PromotionWaitShare": "YearsSinceLastPromotion / (YearsAtCompany + 1)",
+      "MeanSatisfaction": "mean of Environment, Job, Relationship satisfaction and WorkLifeBalance"
+    },
+    "cv_ap_change": 0.013835053708226575,
+    "folds_improved": 4,
+    "adoption_rule": "CV AP gain of at least 0.01 and higher AP in at least 4 of 5 folds",
+    "meets_adoption_rule": true,
+    "adopted": false,
+    "note": "Even when the rule is met, adoption needs validation on data not used for these choices."
+  },
+  "nested_cv": {
+    "method": "training partition only; the full selection procedure runs inside each outer training fold",
+    "outer_folds": 5,
+    "inner_folds": {
+      "fixed": 5,
+      "tuned": 3
+    },
+    "param_grids": {
+      "logistic_regression": {
+        "C": [
+          0.03,
+          0.1,
+          0.3,
+          1.0,
+          3.0
+        ]
+      },
+      "logistic_balanced": {
+        "C": [
+          0.03,
+          0.1,
+          0.3,
+          1.0,
+          3.0
+        ]
+      },
+      "random_forest": {
+        "max_depth": [
+          5,
+          7
+        ],
+        "min_samples_leaf": [
+          3,
+          5,
+          10
+        ]
+      },
+      "hist_gradient_boosting": {
+        "learning_rate": [
+          0.03,
+          0.1
+        ],
+        "max_leaf_nodes": [
+          7,
+          15
+        ]
+      }
+    },
+    "selected_model_cv_ap": 0.6514396060738317,
+    "procedures": {
+      "fixed": {
+        "pr_auc": {
+          "mean": 0.6514396060738317,
+          "std": 0.061069535881700776
+        },
+        "roc_auc": {
+          "mean": 0.8391885728781269,
+          "std": 0.02894125678517016
+        },
+        "precision": {
+          "mean": 0.36938216429917364,
+          "std": 0.04735323889749468
+        },
+        "recall": {
+          "mean": 0.7578947368421053,
+          "std": 0.06531407182100447
+        },
+        "f1": {
+          "mean": 0.49212297661301757,
+          "std": 0.03370231480244894
+        },
+        "selection_counts": {
+          "logistic_regression": 5
+        },
+        "threshold_min": 0.1,
+        "threshold_max": 0.2
+      },
+      "tuned": {
+        "pr_auc": {
+          "mean": 0.6461719393806963,
+          "std": 0.04796362543620623
+        },
+        "roc_auc": {
+          "mean": 0.8364375791038896,
+          "std": 0.025619266569404647
+        },
+        "precision": {
+          "mean": 0.40765680591702524,
+          "std": 0.05358309668009274
+        },
+        "recall": {
+          "mean": 0.7473684210526315,
+          "std": 0.08085416576703797
+        },
+        "f1": {
+          "mean": 0.5216680487754899,
+          "std": 0.034138265015513015
+        },
+        "selection_counts": {
+          "logistic_regression": 5
+        },
+        "threshold_min": 0.1,
+        "threshold_max": 0.2
+      }
+    },
+    "served_model_changed": false
   }
 }

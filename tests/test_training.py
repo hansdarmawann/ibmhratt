@@ -4,7 +4,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from attrition.models.evaluate import BOOTSTRAP_METRICS, bootstrap_intervals, subgroup_metrics
+from attrition.models.evaluate import (
+    BOOTSTRAP_METRICS,
+    bootstrap_intervals,
+    group_rate_intervals,
+    subgroup_metrics,
+)
 from attrition.models.threshold import select_threshold
 from attrition.models.train import RESULTS_END, RESULTS_START, replace_export, replace_results_block, select_model
 
@@ -86,3 +91,28 @@ def test_replace_export_removes_files_from_earlier_runs(tmp_path):
     files = {p.relative_to(destination).as_posix() for p in destination.rglob("*") if p.is_file()}
     assert files == {".gitkeep", "metrics.csv", "nested/table.csv"}
     assert (destination / "metrics.csv").read_text(encoding="utf-8") == "new"
+
+
+def test_subgroup_intervals_bracket_rates_and_skip_missing_classes():
+    rng = np.random.default_rng(0)
+    y = np.array([1] * 20 + [0] * 80)
+    flagged = np.r_[rng.random(20) < 0.6, rng.random(80) < 0.2]
+    first = group_rate_intervals(y, flagged, np.random.default_rng(1), n_boot=500, confidence=0.95)
+    again = group_rate_intervals(y, flagged, np.random.default_rng(1), n_boot=500, confidence=0.95)
+    assert first == again
+    for name, value in [("recall", flagged[y == 1].mean()), ("false_positive_rate", flagged[y == 0].mean()),
+                        ("selection_rate", flagged.mean())]:
+        assert first[f"{name}_lower"] <= value <= first[f"{name}_upper"]
+    no_positives = group_rate_intervals(np.zeros(10), np.ones(10), np.random.default_rng(1), n_boot=50,
+                                        confidence=0.95)
+    assert no_positives["recall_lower"] is None and no_positives["recall_upper"] is None
+    assert no_positives["false_positive_rate_lower"] == 1
+
+
+def test_subgroup_table_includes_interval_columns():
+    X = pd.DataFrame({"Gender": ["Female", "Male"] * 10, "MaritalStatus": ["Single"] * 20,
+                      "Age": [25, 45] * 10})
+    y = pd.Series([1, 0] * 10)
+    table = subgroup_metrics(X, y, np.linspace(0, 1, 20), threshold=0.5, n_boot=100)
+    assert {"recall_lower", "recall_upper", "selection_rate_lower", "false_positive_rate_upper"} <= set(table)
+    assert table["n"].groupby(table["attribute"]).sum().eq(20).all()
