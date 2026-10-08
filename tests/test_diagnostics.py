@@ -1,5 +1,7 @@
 """Test fold isolation, deterministic diagnostics, and capacity arithmetic."""
 
+from typing import ClassVar
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -20,7 +22,7 @@ from src.models.train import select_model
 
 
 class RecordFitRows(TransformerMixin, BaseEstimator):
-    fitted_rows = []
+    fitted_rows: ClassVar[list[set]] = []  # shared across sklearn clones on purpose
 
     def fit(self, X, y=None):
         self.fitted_rows.append(set(X.index))

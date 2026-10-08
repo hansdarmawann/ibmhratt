@@ -3,7 +3,7 @@
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -17,7 +17,7 @@ LOGGER = logging.getLogger(__name__)
 
 def employee_schema() -> type[BaseModel]:
     """Generate an explicit required-field OpenAPI schema from shared bounds."""
-    fields = {}
+    fields: dict[str, Any] = {}
     for name, (lower, upper) in NUMERIC_BOUNDS.items():
         fields[name] = (Annotated[StrictInt | None, Field(ge=lower, le=upper)], ...)
     for name, values in CATEGORIES.items():
@@ -27,7 +27,10 @@ def employee_schema() -> type[BaseModel]:
     return create_model("EmployeeInput", __config__=ConfigDict(extra="forbid"), **fields)
 
 
-EmployeeInput = employee_schema()
+if TYPE_CHECKING:  # Type checkers cannot follow create_model; the runtime schema is generated.
+    EmployeeInput = BaseModel
+else:
+    EmployeeInput = employee_schema()
 
 
 class PredictionResponse(BaseModel):
