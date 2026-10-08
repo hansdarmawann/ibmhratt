@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import overload
 
 import pandas as pd
 from sklearn.pipeline import Pipeline
@@ -23,6 +24,11 @@ def load_pipeline(path: str | Path = CURRENT_RUN) -> Pipeline:
     return load_bundle(path).pipeline
 
 
+@overload
+def predict(data: dict, *, pipeline: Pipeline | None = None, model_path: str | Path = CURRENT_RUN) -> dict: ...
+@overload
+def predict(data: pd.DataFrame, *, pipeline: Pipeline | None = None,
+            model_path: str | Path = CURRENT_RUN) -> list[dict]: ...
 def predict(data: dict | pd.DataFrame, *, pipeline: Pipeline | None = None,
             model_path: str | Path = CURRENT_RUN) -> dict | list[dict]:
     """Use the artifact's frozen threshold; dictionary in gives dictionary out.
@@ -34,7 +40,7 @@ def predict(data: dict | pd.DataFrame, *, pipeline: Pipeline | None = None,
     if not isinstance(data, (dict, pd.DataFrame)):
         raise ValueError("Prediction input must be a dictionary or pandas DataFrame.")
     single = isinstance(data, dict)
-    frame = pd.DataFrame([data]) if single else data.copy()
+    frame = pd.DataFrame([data]) if isinstance(data, dict) else data.copy()
     extra = set(frame.columns) - set(FEATURE_COLUMNS) - set(CONSTANT_COLUMNS) - {ID_COLUMN}
     if extra:
         raise ValueError(f"Unexpected prediction fields: {sorted(extra)}")

@@ -7,12 +7,23 @@ target-version = "py312"
 extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "RET", "PTH", "C4", "PIE", "RUF"]
+# Typographic characters (×, –, ·, →) are intentional in UI and notebook prose.
+ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.per-file-ignores]
 # Intentional late imports: sys.path setup for Streamlit, matplotlib backend selection.
 "app/streamlit_app.py" = ["E402"]
 "src/visualization/plots.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "app", "scripts"]
+# scikit-learn, joblib, SHAP, and Streamlit internals ship without complete stubs.
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

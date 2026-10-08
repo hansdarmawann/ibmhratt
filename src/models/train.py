@@ -7,10 +7,12 @@ import json
 import logging
 import platform
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
@@ -165,97 +167,165 @@ def replace_export(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination, dirs_exist_ok=True)
 
 
-def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: Path = ROOT) -> dict:
-    """Run the complete experiment and save a full preprocessing/model pipeline."""
-    run_id = str(uuid4())
-    run_dir = output_root / "models/runs" / run_id
-    metrics_dir, figures_dir, processed_dir = (run_dir / name for name in ("metrics", "figures", "processed"))
-    for directory in [metrics_dir, figures_dir, processed_dir]:
+@dataclass(frozen=True)
+class RunPaths:
+    """Directories of one run bundle; every stage writes inside it."""
+
+    run: Path
+    metrics: Path
+    figures: Path
+    processed: Path
+
+
+@dataclass(frozen=True)
+class Partitions:
+    X_train: pd.DataFrame
+    X_test: pd.DataFrame
+    y_train: pd.Series
+    y_test: pd.Series
+
+
+@dataclass(frozen=True)
+class OperatingPoint:
+    """Model and threshold chosen from training data only, then frozen."""
+
+    selected: str
+    reason: str
+    oof: np.ndarray
+    thresholds: pd.DataFrame
+    threshold: float
+
+
+@dataclass(frozen=True)
+class HoldoutResults:
+    probabilities: dict
+    at_default_threshold: dict
+    selected_metrics: dict
+    capacity: pd.DataFrame
+    intervals: pd.DataFrame
+
+
+def create_run_paths(output_root: Path, run_id: str) -> RunPaths:
+    run = output_root / "models/runs" / run_id
+    paths = RunPaths(run, run / "metrics", run / "figures", run / "processed")
+    for directory in [paths.metrics, paths.figures, paths.processed]:
         directory.mkdir(parents=True, exist_ok=True)
-    LOGGER.info("Model training started")
+    return paths
+
+
+def prepare_data(data_path: Path, paths: RunPaths) -> Partitions:
+    """Validate, reserve the holdout, and explore training rows only."""
     data = load_data(data_path)
-    save_json(data_audit(data), metrics_dir / "data_audit.json")
+    save_json(data_audit(data), paths.metrics / "data_audit.json")
     X_train, X_test, y_train, y_test = split_data(data)
-    exclusions = feature_exclusions(X_train)
-    save_json(exclusions, metrics_dir / "feature_exclusions.json")
+    save_json(feature_exclusions(X_train), paths.metrics / "feature_exclusions.json")
     manifest = pd.DataFrame({"row_index": data.index, "partition": "train"})
     manifest.loc[X_test.index, "partition"] = "test"
-    manifest.to_csv(processed_dir / "split_manifest.csv", index=False)
-    save_exploration(X_train, y_train, metrics_dir, figures_dir)
-    cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_STATE)
-    pipelines = candidate_pipelines(X_train)
+    manifest.to_csv(paths.processed / "split_manifest.csv", index=False)
+    save_exploration(X_train, y_train, paths.metrics, paths.figures)
+    return Partitions(X_train, X_test, y_train, y_test)
+
+
+def compare_models(parts: Partitions, cv, paths: RunPaths) -> tuple[dict, dict]:
+    """Cross-validate candidates plus the fixed ablations; return candidates and all summaries."""
+    pipelines = candidate_pipelines(parts.X_train)
     summaries = {}
     fold_tables = []
     for name, pipeline in pipelines.items():
         LOGGER.info("Cross-validating %s", name)
-        summaries[name], folds = cross_validation_metrics(pipeline, X_train, y_train, cv)
+        summaries[name], folds = cross_validation_metrics(pipeline, parts.X_train, parts.y_train, cv)
         fold_tables.append(folds.assign(model=name))
     # Fixed diagnostic experiments, not extra candidates for final selection.
     for name, excluded in [("logistic_without_sensitive", SENSITIVE_COLUMNS),
                             ("logistic_reduced_correlations", REDUNDANT_COLUMNS)]:
         estimator = LogisticRegression(C=1.0, max_iter=2000, random_state=RANDOM_STATE)
-        pipeline = build_pipeline(X_train, estimator, exclude=excluded)
-        summaries[name], folds = cross_validation_metrics(pipeline, X_train, y_train, cv)
+        pipeline = build_pipeline(parts.X_train, estimator, exclude=excluded)
+        summaries[name], folds = cross_validation_metrics(pipeline, parts.X_train, parts.y_train, cv)
         fold_tables.append(folds.assign(model=name))
-    pd.concat(fold_tables).to_csv(metrics_dir / "cv_fold_metrics.csv")
+    pd.concat(fold_tables).to_csv(paths.metrics / "cv_fold_metrics.csv")
+    return pipelines, summaries
+
+
+def choose_operating_point(pipelines: dict, summaries: dict, parts: Partitions, cv,
+                           paths: RunPaths) -> OperatingPoint:
+    """Select the model on training CV AP, then its threshold on training OOF F2."""
     selected, reason = select_model({name: summaries[name] for name in pipelines})
     LOGGER.info("Selected %s using training CV", selected)
-    oof = cross_val_predict(pipelines[selected], X_train, y_train, cv=cv,
-                           method="predict_proba", n_jobs=1)[:, 1]
-    thresholds = threshold_table(y_train, oof)
+    oof = cross_val_predict(pipelines[selected], parts.X_train, parts.y_train, cv=cv,
+                            method="predict_proba", n_jobs=1)[:, 1]
+    thresholds = threshold_table(parts.y_train, oof)
     threshold = select_threshold(thresholds)
-    thresholds.to_csv(metrics_dir / "threshold_analysis.csv", index=False)
-    pd.DataFrame({"row_index": X_train.index, "target": y_train.to_numpy(),
-                  "oof_probability": oof}).to_csv(processed_dir / "oof_predictions.csv", index=False)
+    thresholds.to_csv(paths.metrics / "threshold_analysis.csv", index=False)
+    pd.DataFrame({"row_index": parts.X_train.index, "target": parts.y_train.to_numpy(),
+                  "oof_probability": oof}).to_csv(paths.processed / "oof_predictions.csv", index=False)
+    return OperatingPoint(selected, reason, oof, thresholds, threshold)
+
+
+def training_diagnostics(pipelines: dict, summaries: dict, point: OperatingPoint, parts: Partitions,
+                         paths: RunPaths) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Calibration and seed stability on training rows; neither changes the served model."""
     LOGGER.info("Running training-only calibration and stability diagnostics")
-    calibration_scores, calibration_bins, calibration_oof = calibration_diagnostics(pipelines[selected], X_train, y_train)
-    calibration_scores.to_csv(metrics_dir / "calibration_metrics.csv", index=False)
-    calibration_bins.to_csv(metrics_dir / "calibration_bins.csv", index=False)
-    calibration_oof.to_csv(processed_dir / "calibration_oof.csv", index=False)
-    save_calibration_plot(calibration_bins, figures_dir)
+    calibration_scores, calibration_bins, calibration_oof = calibration_diagnostics(
+        pipelines[point.selected], parts.X_train, parts.y_train)
+    calibration_scores.to_csv(paths.metrics / "calibration_metrics.csv", index=False)
+    calibration_bins.to_csv(paths.metrics / "calibration_bins.csv", index=False)
+    calibration_oof.to_csv(paths.processed / "calibration_oof.csv", index=False)
+    save_calibration_plot(calibration_bins, paths.figures)
     repeat_scores, repeat_choices = stability_diagnostics(
-        pipelines, X_train, y_train, select_model,
-        baseline=({name: summaries[name] for name in pipelines}, selected, oof))
-    repeat_scores.to_csv(metrics_dir / "stability_comparison.csv", index=False)
-    repeat_choices.to_csv(metrics_dir / "stability_selections.csv", index=False)
-    LOGGER.info("Threshold frozen at %.2f; starting final holdout evaluation", threshold)
-    probabilities, holdout = {}, {}
+        pipelines, parts.X_train, parts.y_train, select_model,
+        baseline=({name: summaries[name] for name in pipelines}, point.selected, point.oof))
+    repeat_scores.to_csv(paths.metrics / "stability_comparison.csv", index=False)
+    repeat_choices.to_csv(paths.metrics / "stability_selections.csv", index=False)
+    return calibration_scores, repeat_choices
+
+
+def evaluate_holdout(pipelines: dict, point: OperatingPoint, parts: Partitions, paths: RunPaths) -> HoldoutResults:
+    """Fit candidates on training rows and evaluate the frozen choice once on the holdout."""
+    LOGGER.info("Threshold frozen at %.2f; starting final holdout evaluation", point.threshold)
+    probabilities, at_default = {}, {}
     for name, pipeline in pipelines.items():
-        pipeline.fit(X_train, y_train)
-        probabilities[name] = pipeline.predict_proba(X_test)[:, 1]
-        holdout[name] = evaluate_probabilities(y_test, probabilities[name], DEFAULT_THRESHOLD)
-    selected_metrics = evaluate_probabilities(y_test, probabilities[selected], threshold)
-    capacity = pd.concat([capacity_metrics(y_train, oof, partition="training_oof"),
-                          capacity_metrics(y_test, probabilities[selected], partition="holdout")], ignore_index=True)
-    capacity.to_csv(metrics_dir / "capacity_metrics.csv", index=False)
-    pd.DataFrame(holdout).T.drop(columns="confusion_matrix").to_csv(metrics_dir / "model_comparison.csv")
-    save_evaluation_plots(y_test, probabilities, selected, selected_metrics, thresholds, figures_dir)
-    explain_models(pipelines, selected, X_test, y_test, metrics_dir, figures_dir)
-    subgroup_metrics(X_test, y_test, probabilities[selected], threshold).to_csv(
-        metrics_dir / "subgroup_metrics.csv", index=False)
+        pipeline.fit(parts.X_train, parts.y_train)
+        probabilities[name] = pipeline.predict_proba(parts.X_test)[:, 1]
+        at_default[name] = evaluate_probabilities(parts.y_test, probabilities[name], DEFAULT_THRESHOLD)
+    selected_probabilities = probabilities[point.selected]
+    selected_metrics = evaluate_probabilities(parts.y_test, selected_probabilities, point.threshold)
+    capacity = pd.concat([capacity_metrics(parts.y_train, point.oof, partition="training_oof"),
+                          capacity_metrics(parts.y_test, selected_probabilities, partition="holdout")],
+                         ignore_index=True)
+    capacity.to_csv(paths.metrics / "capacity_metrics.csv", index=False)
+    pd.DataFrame(at_default).T.drop(columns="confusion_matrix").to_csv(paths.metrics / "model_comparison.csv")
+    save_evaluation_plots(parts.y_test, probabilities, point.selected, selected_metrics, point.thresholds,
+                          paths.figures)
+    explain_models(pipelines, point.selected, parts.X_test, parts.y_test, paths.metrics, paths.figures)
+    subgroup_metrics(parts.X_test, parts.y_test, selected_probabilities, point.threshold).to_csv(
+        paths.metrics / "subgroup_metrics.csv", index=False)
     # Uncertainty of the frozen choice only; intervals never feed back into selection.
-    intervals = bootstrap_intervals(y_test, probabilities[selected], threshold)
-    intervals.to_csv(metrics_dir / "holdout_bootstrap_ci.csv", index=False)
-    shap_status = (explain_shap(pipelines[selected], X_train, X_test, metrics_dir, figures_dir)
-                   if with_shap else {"status": "not_requested", "enable": "python -m src.models.train --with-shap"})
+    intervals = bootstrap_intervals(parts.y_test, selected_probabilities, point.threshold)
+    intervals.to_csv(paths.metrics / "holdout_bootstrap_ci.csv", index=False)
+    return HoldoutResults(probabilities, at_default, selected_metrics, capacity, intervals)
+
+
+def build_metadata(run_id: str, point: OperatingPoint, parts: Partitions, data_path: Path) -> dict:
     versions = {name: importlib.metadata.version(name)
                 for name in ["numpy", "pandas", "scikit-learn", "joblib"]}
-    metadata = {
-        "schema_version": 2, "run_id": run_id, "selected_model": selected, "decision_threshold": threshold,
+    return {
+        "schema_version": 2, "run_id": run_id, "selected_model": point.selected,
+        "decision_threshold": point.threshold,
         "feature_columns": FEATURE_COLUMNS, "target_mapping": TARGET_MAPPING,
         "random_state": RANDOM_STATE, "python_version": platform.python_version(),
         "package_versions": versions, "data_sha256": hashlib.sha256(data_path.read_bytes()).hexdigest(),
-        "train_rows": len(X_train), "test_rows": len(X_test),
+        "train_rows": len(parts.X_train), "test_rows": len(parts.X_test),
         "trained_on": "training partition only; holdout not used for refitting",
     }
-    final_pipeline = pipelines[selected]
-    final_pipeline.attrition_metadata_ = metadata
-    joblib.dump(final_pipeline, run_dir / "pipeline.joblib")
-    save_json(metadata, run_dir / "metadata.json")
-    report = {
+
+
+def build_report(metadata: dict, summaries: dict, point: OperatingPoint, holdout: HoldoutResults,
+                 calibration_scores: pd.DataFrame, repeat_choices: pd.DataFrame, shap_status: dict) -> dict:
+    intervals = holdout.intervals
+    return {
         **metadata, "metric_definition": "pr_auc is sklearn average_precision_score",
-        "cross_validation": summaries, "holdout_at_0_5": holdout,
-        "selected_threshold": threshold, "selected_model_metrics": selected_metrics,
+        "cross_validation": summaries, "holdout_at_0_5": holdout.at_default_threshold,
+        "selected_threshold": point.threshold, "selected_model_metrics": holdout.selected_metrics,
         "calibration_diagnostics": calibration_scores.to_dict(orient="records"),
         "stability_diagnostics": {
             "selection_counts": {name: int(count) for name, count in repeat_choices.selected_model.value_counts().items()},
@@ -264,7 +334,7 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
             "threshold_std": float(repeat_choices.threshold.std(ddof=0)),
             "main_seed": RANDOM_STATE,
         },
-        "capacity_metrics": capacity.to_dict(orient="records"),
+        "capacity_metrics": holdout.capacity.to_dict(orient="records"),
         "selected_model_ci": {
             "method": "stratified percentile bootstrap of the holdout; model and threshold frozen",
             "confidence": float(intervals["confidence"].iloc[0]),
@@ -272,7 +342,8 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
             "intervals": {row.metric: {"lower": float(row.lower), "upper": float(row.upper)}
                           for row in intervals.itertuples()},
         },
-        "selection_reason": reason, "threshold_rule": "Maximize training OOF F2, ties: precision then threshold",
+        "selection_reason": point.reason,
+        "threshold_rule": "Maximize training OOF F2, ties: precision then threshold",
         "shap": shap_status,
         "sensitive_ablation": {"excluded": SENSITIVE_COLUMNS,
                                "cv_ap_change": summaries["logistic_without_sensitive"]["pr_auc"]["mean"]
@@ -281,25 +352,34 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
                                  "cv_ap_change": summaries["logistic_reduced_correlations"]["pr_auc"]["mean"]
                                  - summaries["logistic_regression"]["pr_auc"]["mean"]},
     }
-    save_json(report, metrics_dir / "model_metrics.json")
+
+
+def write_bundle(paths: RunPaths, pipeline, metadata: dict, report: dict, parts: Partitions) -> tuple[str, dict]:
+    """Save every bundle file, then seal it; returns the results text and sample request."""
+    pipeline.attrition_metadata_ = metadata
+    joblib.dump(pipeline, paths.run / "pipeline.joblib")
+    save_json(metadata, paths.run / "metadata.json")
+    save_json(report, paths.metrics / "model_metrics.json")
     result_text = markdown_results(report)
-    (run_dir / "results.md").write_text("# Executed experiment results\n\n" + result_text, encoding="utf-8")
+    (paths.run / "results.md").write_text("# Executed experiment results\n\n" + result_text, encoding="utf-8")
     # One sample is enough for a reproducible local request; no raw request logging.
-    example = X_train[FEATURE_COLUMNS].iloc[0].to_dict()
-    save_json(example, run_dir / "employee.json")
-    background = X_train[FEATURE_COLUMNS].sample(min(100, len(X_train)), random_state=RANDOM_STATE)
-    save_json(json.loads(background.to_json(orient="records")), run_dir / "background.json")
-    seal_bundle(run_dir)
-    publish_bundle(run_dir, output_root / "models/current.json")
-    LOGGER.info("Validated run %s is now active", run_id)
-    # Git exports are snapshots of the active run only. Serving always reads the immutable bundle.
-    for source, destination in [(metrics_dir, output_root / "reports/metrics"),
-                                (figures_dir, output_root / "reports/figures"),
-                                (processed_dir, output_root / "data/processed")]:
+    example = parts.X_train[FEATURE_COLUMNS].iloc[0].to_dict()
+    save_json(example, paths.run / "employee.json")
+    background = parts.X_train[FEATURE_COLUMNS].sample(min(100, len(parts.X_train)), random_state=RANDOM_STATE)
+    save_json(json.loads(background.to_json(orient="records")), paths.run / "background.json")
+    seal_bundle(paths.run)
+    return result_text, example
+
+
+def export_snapshot(paths: RunPaths, report: dict, result_text: str, example: dict, output_root: Path) -> None:
+    """Git exports are snapshots of the active run only. Serving always reads the immutable bundle."""
+    for source, destination in [(paths.metrics, output_root / "reports/metrics"),
+                                (paths.figures, output_root / "reports/figures"),
+                                (paths.processed, output_root / "data/processed")]:
         replace_export(source, destination)
     export_report = {key: value for key, value in report.items() if key != "run_id"}
     save_json(export_report, output_root / "reports/metrics/model_metrics.json")
-    shutil.copyfile(run_dir / "results.md", output_root / "reports/results.md")
+    shutil.copyfile(paths.run / "results.md", output_root / "reports/results.md")
     save_json(example, output_root / "examples/employee.json")
     readme = output_root / "README.md"
     if readme.exists():
@@ -307,8 +387,30 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
         updated = replace_results_block(contents, result_text)
         if updated != contents:
             readme.write_text(updated, encoding="utf-8")
+
+
+def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: Path = ROOT) -> dict:
+    """Run the complete experiment and save a full preprocessing/model pipeline."""
+    run_id = str(uuid4())
+    paths = create_run_paths(output_root, run_id)
+    LOGGER.info("Model training started")
+    parts = prepare_data(data_path, paths)
+    cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_STATE)
+    pipelines, summaries = compare_models(parts, cv, paths)
+    point = choose_operating_point(pipelines, summaries, parts, cv, paths)
+    calibration_scores, repeat_choices = training_diagnostics(pipelines, summaries, point, parts, paths)
+    holdout = evaluate_holdout(pipelines, point, parts, paths)
+    shap_status = (explain_shap(pipelines[point.selected], parts.X_train, parts.X_test, paths.metrics, paths.figures)
+                   if with_shap else {"status": "not_requested", "enable": "python -m src.models.train --with-shap"})
+    metadata = build_metadata(run_id, point, parts, data_path)
+    report = build_report(metadata, summaries, point, holdout, calibration_scores, repeat_choices, shap_status)
+    result_text, example = write_bundle(paths, pipelines[point.selected], metadata, report, parts)
+    publish_bundle(paths.run, output_root / "models/current.json")
+    LOGGER.info("Validated run %s is now active", run_id)
+    export_snapshot(paths, report, result_text, example, output_root)
+    metrics = holdout.selected_metrics
     LOGGER.info("Model training completed: AP %.3f; recall %.3f; F1 %.3f",
-                selected_metrics["pr_auc"], selected_metrics["recall"], selected_metrics["f1"])
+                metrics["pr_auc"], metrics["recall"], metrics["f1"])
     return report
 
 

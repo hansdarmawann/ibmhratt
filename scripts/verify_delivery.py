@@ -124,9 +124,8 @@ def main() -> None:
     LOGGER.info("Live FastAPI /health and /predict verified against saved pipeline")
     with local_service(["streamlit", "run", "app/streamlit_app.py", "--server.address=127.0.0.1",
                         "--server.port={port}", "--server.headless=true", "--browser.gatherUsageStats=false"],
-                       "/_stcore/health") as base_url:
-        with urllib.request.urlopen(base_url, timeout=10) as response:
-            assert response.status == 200
+                       "/_stcore/health") as base_url, urllib.request.urlopen(base_url, timeout=10) as response:
+        assert response.status == 200
     LOGGER.info("Live Streamlit HTTP startup verified; services stopped")
 
 
