@@ -6,7 +6,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassif
 
 from src.config import FEATURE_COLUMNS
 from src.features.preprocess import build_pipeline
-from src.models.local_explain import explain_profile, explained_probability
+from src.models.local_explain import check_additive, explain_profile, explained_probability
 from src.models.predict import predict
 
 
@@ -49,3 +49,9 @@ def test_optional_failure_does_not_break_prediction(monkeypatch, fitted_pipeline
     assert np.isfinite(predict(employee, pipeline=fitted_pipeline)["attrition_probability"])
     with pytest.raises(ValueError, match="units"):
         explained_probability(0, 0, "unspecified")
+
+
+def test_additivity_failure_is_a_domain_error():
+    check_additive(np.array([0.5]), np.array([0.5 + 1e-8]))
+    with pytest.raises(ValueError, match="reconstruct"):
+        check_additive(np.array([0.5]), np.array([0.6]))
