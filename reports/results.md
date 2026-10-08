@@ -24,3 +24,9 @@ At the frozen operating threshold, holdout AP = **0.584**, ROC-AUC = **0.812**, 
 Selection uses only five-fold training average precision. Prefer unweighted, then balanced logistic regression when within 0.01 AP of the best non-dummy model, for interpretability and simpler operation. Otherwise use the highest mean AP. Best AP candidate: logistic_regression; selected: logistic_regression. This rule was fixed before holdout evaluation.
 
 OOF threshold scores reuse the training folds used for model comparison and are selection diagnostics, not an unbiased performance estimate. The holdout is evaluated after choices are frozen. There are 47 positive holdout examples, so small count changes materially affect recall.
+
+### Three additional findings
+
+1. Training outer-OOF Brier score: uncalibrated **0.090**, sigmoid **0.093**; log loss **0.321** versus **0.321**. Calibration is diagnostic only; serving probabilities are unchanged.
+2. Across training CV seeds 42, 43, and 44, selections were **{'logistic_regression': 3}**, with thresholds from **0.15** to **0.20**. Seed 42 remains the main experiment.
+3. The highest-scored 10% of holdout profiles (30 rows) have precision **0.633**, recall **0.404**, and lift **3.96**. This is a capacity diagnostic, not an intervention policy.

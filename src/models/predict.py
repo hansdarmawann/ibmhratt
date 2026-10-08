@@ -3,42 +3,28 @@
 import argparse
 import json
 import logging
-import warnings
 from pathlib import Path
 
-import joblib
-import numpy as np
 import pandas as pd
-from sklearn.exceptions import InconsistentVersionWarning
 from sklearn.pipeline import Pipeline
 
-from src.config import CONSTANT_COLUMNS, FEATURE_COLUMNS, ID_COLUMN, MODEL_PATH
+from src.config import CONSTANT_COLUMNS, CURRENT_RUN, FEATURE_COLUMNS, ID_COLUMN
 from src.data.validate_data import validate_features
+from src.models.artifacts import load_bundle, load_legacy_pipeline
 
 LOGGER = logging.getLogger(__name__)
 
 
-def load_pipeline(path: str | Path = MODEL_PATH) -> Pipeline:
-    """Load only a trusted local joblib file; pickle formats can execute code."""
+def load_pipeline(path: str | Path = CURRENT_RUN) -> Pipeline:
+    """Load the active verified bundle, or an explicit legacy schema-1 file."""
     path = Path(path)
-    if not path.is_file():
-        raise FileNotFoundError("Model is unavailable. Run: python -m src.models.train")
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", InconsistentVersionWarning)
-        pipeline = joblib.load(path)
-    if not isinstance(pipeline, Pipeline) or not hasattr(pipeline, "attrition_metadata_"):
-        raise ValueError("Invalid model artifact: expected a complete pipeline and metadata.")
-    metadata = pipeline.attrition_metadata_
-    threshold = metadata.get("decision_threshold")
-    if (metadata.get("schema_version") != 1 or metadata.get("feature_columns") != FEATURE_COLUMNS
-            or not isinstance(threshold, (int, float)) or not np.isfinite(threshold)
-            or not 0 <= threshold <= 1 or list(pipeline.classes_) != [0, 1]):
-        raise ValueError("Invalid model schema, classes, or decision threshold; retrain the model.")
-    return pipeline
+    if path.suffix == ".joblib":
+        return load_legacy_pipeline(path)
+    return load_bundle(path).pipeline
 
 
 def predict(data: dict | pd.DataFrame, *, pipeline: Pipeline | None = None,
-            model_path: str | Path = MODEL_PATH) -> dict | list[dict]:
+            model_path: str | Path = CURRENT_RUN) -> dict | list[dict]:
     """Use the artifact's frozen threshold; dictionary in gives dictionary out.
 
     A DataFrame returns a list in the original row order. Null values are imputed;
@@ -59,7 +45,8 @@ def predict(data: dict | pd.DataFrame, *, pipeline: Pipeline | None = None,
     LOGGER.info("Prediction request received: %d record(s)", len(frame))
     probabilities = pipeline.predict_proba(frame[FEATURE_COLUMNS])[:, 1]
     outputs = [{"predicted_class": "Yes" if probability >= threshold else "No",
-                "attrition_probability": float(probability), "decision_threshold": threshold}
+                "attrition_probability": float(probability), "decision_threshold": threshold,
+                "run_id": pipeline.attrition_metadata_.get("run_id")}
                for probability in probabilities]
     return outputs[0] if single else outputs
 
@@ -68,7 +55,7 @@ def main() -> None:
     """Read one JSON employee record from a file and emit JSON to stdout."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Path to a JSON object of employee features")
-    parser.add_argument("--model", type=Path, default=MODEL_PATH)
+    parser.add_argument("--model", type=Path, default=CURRENT_RUN)
     args = parser.parse_args()
     data = json.loads(args.input.read_text(encoding="utf-8"))
     print(json.dumps(predict(data, model_path=args.model), indent=2))

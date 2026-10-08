@@ -39,6 +39,7 @@ jobs:
           cache: pip
           cache-dependency-path: |
             requirements.txt
+            requirements-serving.txt
             requirements-dev.txt
             requirements-explain.txt
             requirements-lock.txt
@@ -51,9 +52,13 @@ jobs:
       - name: Run unit and integration tests with coverage
         run: >-
           python -m pytest -q --junitxml=reports/test-results.xml
-          --cov --cov-report=term --cov-report=xml:reports/coverage.xml
+          --cov --cov-report=term --cov-fail-under=0
       - name: Train from the canonical raw dataset
-        run: python -m src.models.train --with-shap
+        run: python -m coverage run --append -m src.models.train --with-shap
+      - name: Enforce combined test and training coverage
+        run: |
+          python -m coverage report --fail-under=80
+          python -m coverage xml -o reports/coverage.xml
       - name: Check committed results match a fresh run
         shell: bash
         run: |
@@ -77,6 +82,7 @@ jobs:
             reports/
             models/*.joblib
             models/*.json
+            models/runs/
             data/processed/*.csv
             notebooks/*.ipynb
 
@@ -113,42 +119,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Test container health and prediction
-        shell: bash
-        run: |
-          set -euo pipefail
-          trap 'docker logs attrition-ci; docker rm -f attrition-ci' EXIT
-          docker run --detach --name attrition-ci --publish 127.0.0.1:8000:8000 attrition-ci:local
-          python - <<'PY'
-          import json
-          import time
-          import urllib.error
-          import urllib.request
-
-          base = "http://127.0.0.1:8000"
-          for attempt in range(60):
-              try:
-                  with urllib.request.urlopen(base + "/health", timeout=2) as response:
-                      assert json.load(response) == {"status": "ok", "model_available": True}
-                  break
-              except (urllib.error.URLError, OSError):
-                  time.sleep(1)
-          else:
-              raise SystemExit("Container failed to become healthy")
-          with open("examples/employee.json", encoding="utf-8") as source:
-              payload = json.load(source)
-          request = urllib.request.Request(
-              base + "/predict", data=json.dumps(payload).encode(),
-              headers={"Content-Type": "application/json"}, method="POST",
-          )
-          with urllib.request.urlopen(request, timeout=10) as response:
-              result = json.load(response)
-          assert 0 <= result["attrition_probability"] <= 1
-          assert 0 <= result["threshold"] <= 1
-          expected = "Yes" if result["attrition_probability"] >= result["threshold"] else "No"
-          assert result["prediction"] == expected
-          print("Container /health and /predict verified")
-          PY
+      - name: Test container health, prediction, and runtime contents
+        run: python -m scripts.verify_container --image attrition-ci:local
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.event.repository.fork == false
         uses: docker/login-action@v3

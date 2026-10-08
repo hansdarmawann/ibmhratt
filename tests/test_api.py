@@ -10,13 +10,28 @@ from src.models.predict import predict
 def test_health_and_prediction(artifact, employee):
     with TestClient(create_app(artifact)) as client:
         assert client.get("/").status_code == 200
-        assert client.get("/health").json() == {"status": "ok", "model_available": True}
+        assert client.get("/health").json() == {"status": "ok", "model_available": True, "run_id": None}
         response = client.post("/predict", json=employee)
         assert response.status_code == 200
         expected = predict(employee, model_path=artifact)
         assert response.json() == {"prediction": expected["predicted_class"],
                                    "attrition_probability": expected["attrition_probability"],
-                                   "threshold": expected["decision_threshold"]}
+                                   "threshold": expected["decision_threshold"], "run_id": None}
+
+
+def test_api_keeps_one_bundle_until_restart(bundle_factory, tmp_path, employee):
+    first = bundle_factory()
+    pointer = tmp_path / "models/current.json"
+    with TestClient(create_app(pointer)) as client:
+        second = bundle_factory(threshold=0.8)
+        assert client.get("/health").json()["run_id"] == first.run_id
+        result = client.post("/predict", json=employee).json()
+        assert result["run_id"] == first.run_id
+        assert result["threshold"] == 0.35
+    with TestClient(create_app(pointer)) as client:
+        result = client.post("/predict", json=employee).json()
+        assert result["run_id"] == second.run_id
+        assert result["threshold"] == 0.8
 
 
 @pytest.mark.parametrize("change", [{"Age": -1}, {"Age": "35"}, {"Age": True},
