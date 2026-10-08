@@ -162,11 +162,13 @@ Selection uses only five-fold training average precision. Prefer unweighted, the
 
 OOF threshold scores reuse the training folds used for model comparison and are selection diagnostics, not an unbiased performance estimate. The holdout is evaluated after choices are frozen. There are 47 positive holdout examples, so small count changes materially affect recall.
 
-### Three additional findings
+### Additional findings
 
 1. Training outer-OOF Brier score: uncalibrated **0.090**, sigmoid **0.093**; log loss **0.321** versus **0.321**. Calibration is diagnostic only; serving probabilities are unchanged.
 2. Across training CV seeds 42, 43, and 44, selections were **{'logistic_regression': 3}**, with thresholds from **0.15** to **0.20**. Seed 42 remains the main experiment.
 3. The highest-scored 10% of holdout profiles (30 rows) have precision **0.633**, recall **0.404**, and lift **3.96**. This is a capacity diagnostic, not an intervention policy.
+4. Nested CV (5 outer training folds) estimates the whole selection procedure at AP **0.651 ± 0.061**, versus **0.651** ordinary CV AP for the selected model. Tuning small prespecified grids gives **0.646 ± 0.048**. Both are diagnostics; the served model is unchanged.
+5. Five prespecified engineered features change logistic CV AP by **+0.014** (higher in 4 of 5 folds); the prespecified adoption rule is **met**. They are not used by the served model.
 
 <!-- RESULTS:END -->
 
@@ -192,7 +194,7 @@ These explanations describe associations contributing to model predictions. Corr
 
 Gender, Age, and MaritalStatus are retained in the educational main comparison. A prespecified logistic regression ablation removes all three and reports training CV metrics; its AP difference is in `sensitive_ablation` in the JSON report. This does **not** establish whether those attributes are acceptable for an actual HR application.
 
-[Subgroup metrics](reports/metrics/subgroup_metrics.csv) report sample counts, positive counts, recall, false-positive rate, precision, and selection rate by Gender, MaritalStatus, and AgeBand. Small subgroups produce uncertain estimates; no confidence intervals or formal fairness certification are claimed. Excluding sensitive attributes alone cannot eliminate proxies such as job role, compensation, and tenure.
+[Subgroup metrics](reports/metrics/subgroup_metrics.csv) report sample counts, positive counts, recall, false-positive rate, precision, and selection rate by Gender, MaritalStatus, and AgeBand. Each rate has a 95% stratified bootstrap interval (1,000 resamples within the group, frozen model and threshold). The intervals are wide for small groups, which is the point: for example, a group with four observed attrition cases cannot support a precise recall estimate. No formal fairness certification is claimed. Excluding sensitive attributes alone cannot eliminate proxies such as job role, compensation, and tenure.
 
 Real use would require a support-oriented purpose, consent/privacy controls, a governance review, human oversight, appropriate fairness definitions, independent validation, and monitoring. No real employee data should be entered into this demo. Model signals must not determine high-impact employment actions.
 
@@ -293,6 +295,8 @@ Calibration remains **diagnostic only**. Five outer folds on the training partit
 - `calibration_bins.csv` and `calibration_reliability.png`: ten equal-width probability bins; empty bins retain zero counts and missing means.
 - `stability_comparison.csv` and `stability_selections.csv`: five-fold training CV for seeds 42, 43, and 44, including selected-model frequency and threshold variation. Seed 42 remains the main experiment. This does not measure sensitivity to the reserved holdout split.
 - `capacity_metrics.csv`: precision, recall, lift, and counts for the highest-scored 5%, 10%, and 20%; counts round up and score ties preserve row order. Training OOF and final holdout are reported separately.
+- `nested_cv_folds.csv`: nested cross-validation on the training partition. Each of five outer folds re-runs the complete selection procedure (candidate comparison, the prefer-logistic rule, and the F2 threshold) on its training rows and scores the result once on the outer fold. The `fixed` procedure is the one actually served; `tuned` also searches small grids chosen in advance (logistic `C`, forest depth and leaf size, boosting learning rate and leaf count) in three inner folds. This estimates the whole procedure rather than the already-selected model, and shows whether tuning would help. It never changes the served model.
+- Engineered-feature ablation (`feature_engineering_ablation` in the JSON, `logistic_engineered_features` in `cv_fold_metrics.csv`): five fixed formulas (income per job level, share of career at the company, years per prior employer, share of tenure since the last promotion, and mean satisfaction) are added to the logistic model on the same training folds. The adoption rule was written before running it: at least +0.01 CV AP and higher AP in at least four of five folds. Even when met, the features would need validation on data not used for these choices, so the served model does not use them.
 
 The prediction form explains the profile just submitted. Contributions describe the model output, not causal effects. Logistic contributions add in log-odds; tree contributions add in probability units. Optional SHAP failure leaves the prediction available. Install `requirements-explain.txt` to enable this feature; the default container omits SHAP.
 
@@ -330,4 +334,4 @@ Input can be CSV or JSON (one object, a list, or the `{"employees": [...]}` body
 
 This is a small fictional, cross-sectional dataset with no temporal validation or guaranteed feature availability before an attrition event. The structural leakage safeguards do not prove absence of real-world look-ahead bias. Only one holdout split is used; CV variability is reported, and holdout metrics can fluctuate. Scores are uncalibrated probability estimates, particularly for class-weighted models. Ordinal spacing and broad schema bounds are modeling assumptions.
 
-Future work includes nested model-selection evaluation, constrained hyperparameter search, independently validated serving calibration, subgroup uncertainty and fairness metrics, temporal/external validation, scheduled drift monitoring on governed inference traffic, MLflow experiment tracking, DVC data versioning, governed cloud deployment, privacy-preserving database-backed inference logging, and monitored scheduled retraining. These require evidence and a defined operating purpose before adding infrastructure.
+Future work includes independently validated serving calibration, formal fairness metrics, temporal/external validation, scheduled drift monitoring on governed inference traffic, MLflow experiment tracking, DVC data versioning, governed cloud deployment, privacy-preserving database-backed inference logging, and monitored scheduled retraining. These require evidence and a defined operating purpose before adding infrastructure.
