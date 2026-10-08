@@ -1,4 +1,4 @@
-,roc_auc,pr_auc,precision,recall,f1,brier_score,threshold,true_negatives,false_positives,false_negatives,true_positives,n,positive_count
+model,roc_auc,pr_auc,precision,recall,f1,brier_score,threshold,true_negatives,false_positives,false_negatives,true_positives,n,positive_count
 dummy,0.5,0.1598639455782313,0.0,0.0,0.0,0.13431035679577952,0.5,247,0,47,0,294,47
 logistic_regression,0.8115255405289,0.5836342531326222,0.6153846153846154,0.3404255319148936,0.4383561643835616,0.09918620635299684,0.5,237,10,31,16,294,47
 logistic_balanced,0.8031699543457662,0.5612212444049638,0.3488372093023256,0.6382978723404256,0.45112781954887216,0.15608746978216037,0.5,191,56,17,30,294,47
