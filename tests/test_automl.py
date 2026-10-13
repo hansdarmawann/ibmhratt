@@ -138,6 +138,8 @@ def test_search_smoke_is_deterministic_and_fits_only_training_folds(optuna, monk
     first, second = (automl.search(X, y, n_trials=TRIALS, timeout=120, seed=SEED, folds=FOLDS) for _ in range(2))
     for result in (first, second):
         result.pop("elapsed_seconds")
+        for trial in result["trial_records"]:
+            trial.pop("elapsed_seconds")
     assert first == second
     # Two trials plus the untuned dummy reference, each refitted in every fold, for both runs.
     assert len(RecordFit.rows) == 2 * (TRIALS + 1) * FOLDS

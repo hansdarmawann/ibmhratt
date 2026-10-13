@@ -93,9 +93,11 @@ How the search works:
 - The CSV is validated and split exactly like training. Only the training partition reaches the search; the holdout rows, labels, and scores are never used.
 - Each trial samples a family (logistic regression, random forest, or histogram gradient boosting), then only that family's parameters in ranges sized for about 1,000 rows. Logistic regression keeps the L2/lbfgs default, so no invalid solver/penalty combination can be sampled on any supported scikit-learn version.
 - Every trial wraps the estimator in the same preprocessing pipeline as training, and seeded stratified CV refits the whole pipeline inside each training fold. The objective is mean average precision (AP). A prior-based dummy classifier is scored on the same folds as an untuned reference.
-- Trials run serially (`n_jobs=1`) with single-threaded math. With a fixed `--n-trials` that finishes before the timeout, the same seed and data reproduce the same result. If the timeout stops the search early, the number of completed trials depends on machine speed.
+- Trials run serially (`n_jobs=1`) with single-threaded math. With a fixed `--n-trials` that finishes before the timeout, the same seed and data reproduce the same model choices and scores under matching code, dependencies and numerical runtime; elapsed time and provenance can differ. If the timeout stops the search early, the number of completed trials depends on machine speed.
 
 The JSON on stdout records the objective, fold and sampler seeds, budget, completed trials, the best trial's family, parameters, and per-fold CV AP, the dummy reference, training row counts, package versions, and the data SHA-256. Its `holdout_used` and `served_model_changed` fields are always `false`.
+
+For inspectable per-trial JSON/CSV and a paired comparison table, use `--report-dir` and an optional new `--run-id` on either AutoML CLI. See [Experiment tracking](automl-experiments.md) for the schema, failure handling, protected paths, reconstruction and reproducibility limits. Existing `--output` commands remain supported.
 
 Limits: the best trial's CV AP is optimistic, because the same folds chose it. It is a development estimate for a candidate configuration, not a final performance estimate and not comparable to the holdout table. The search does not fit a final model, choose a decision threshold, write a bundle, or change `models/current.json`. A less biased estimate of the whole search procedure needs nested CV; see the next section. Promoting a candidate would need a separate, reviewed change.
 

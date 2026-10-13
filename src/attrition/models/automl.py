@@ -9,8 +9,6 @@ from attrition.models.train is unchanged. Nothing runs at import time.
 
 import argparse
 import hashlib
-import importlib.metadata
-import json
 import logging
 import math
 import time
@@ -28,12 +26,13 @@ from threadpoolctl import threadpool_limits
 from attrition.config import CV_FOLDS, DATA_ENV, DATA_PATH, DATA_RELATIVE, MODELS_DIR, RANDOM_STATE, normalize_path
 from attrition.data.load_data import load_data, split_data
 from attrition.features.preprocess import build_pipeline
+from attrition.models import automl_reporting as reporting
 
 if TYPE_CHECKING:
     import optuna
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 OBJECTIVE = "average_precision"
 FAMILIES = ("logistic_regression", "random_forest", "hist_gradient_boosting")
 # Suggested budget for manual experiments; tests and CI pass much smaller ones.
@@ -98,7 +97,7 @@ def candidate_pipeline(X: pd.DataFrame, model: str, params: dict, seed: int):
 def cv_scores(pipeline, X: pd.DataFrame, y: pd.Series, cv) -> list[float]:
     """Per-fold AP; the whole pipeline, including preprocessing, is refitted inside each training fold."""
     scores = cross_val_score(pipeline, X, y, cv=cv, scoring=OBJECTIVE, n_jobs=1, error_score="raise")
-    # Rounding keeps scores, and so the sampler's history, identical across platforms.
+    # Stable decimal summaries reduce numerical noise; they do not guarantee platform equivalence.
     return [round(float(score), 10) for score in scores]
 
 
@@ -115,8 +114,12 @@ def search(X: pd.DataFrame, y: pd.Series, *, n_trials: int = DEFAULT_TRIALS,
            timeout: float | None = DEFAULT_TIMEOUT, seed: int = RANDOM_STATE, folds: int = CV_FOLDS) -> dict:
     """Run a seeded, serial TPE search on the given training rows and return the best candidate.
 
+    Recoverable estimator failures (ValueError/RuntimeError) are recorded and
+    skipped; unexpected exceptions still abort. If every trial fails, best is
+    null and status is no_successful_trials; the CLI writes evidence then exits 1.
+
     Every trial is scored by the same seeded stratified folds of (X, y). A fixed
-    trial count reproduces the same result; a timeout that stops the search early
+    trial count reproduces choices/scores under matching code and runtime; a timeout that stops the search early
     makes the number of completed trials depend on machine speed.
     """
     optuna = require_optuna()
@@ -125,20 +128,35 @@ def search(X: pd.DataFrame, y: pd.Series, *, n_trials: int = DEFAULT_TRIALS,
     cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
 
     def objective(trial) -> float:
-        family, estimator = suggest_estimator(trial, seed)
-        summary = summarize(cv_scores(build_pipeline(X, estimator, scale=family == "logistic_regression"), X, y, cv))
-        trial.set_user_attr("cv_ap", summary)
-        return summary["mean"]
+        started = time.perf_counter()
+        try:
+            family, estimator = suggest_estimator(trial, seed)
+            trial.set_user_attr("estimator_params", estimator.get_params(deep=False))
+            trial.set_user_attr("estimator_class", f"{type(estimator).__module__}.{type(estimator).__name__}")
+            scores = cv_scores(build_pipeline(X, estimator, scale=family == "logistic_regression"), X, y, cv)
+            if not all(math.isfinite(score) for score in scores):
+                raise ValueError("Trial produced non-finite CV scores.")
+            summary = summarize(scores)
+            trial.set_user_attr("cv_ap", summary)
+            return summary["mean"]
+        except (ValueError, RuntimeError) as exc:
+            trial.set_user_attr("failure", {"type": type(exc).__name__, "message": str(exc)})
+            raise
+        finally:
+            trial.set_user_attr("elapsed_seconds", round(time.perf_counter() - started, 6))
 
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
     started = time.perf_counter()
-    study.optimize(objective, n_trials=n_trials, timeout=timeout, n_jobs=1)
+    study.optimize(objective, n_trials=n_trials, timeout=timeout, n_jobs=1, catch=(ValueError, RuntimeError))
     elapsed = time.perf_counter() - started
-    # Optuna always finishes at least one trial; a failing fit raises instead of being skipped.
     completed = [trial for trial in study.trials if trial.state == optuna.trial.TrialState.COMPLETE]
-    best = study.best_trial
+    best = study.best_trial if completed else None
     reference = cv_scores(build_pipeline(X, DummyClassifier(strategy="prior")), X, y, cv)
-    LOGGER.info("Best trial %d: %s, training CV AP %.3f", best.number, best.params["model"], best.value)
+    if best is not None:
+        LOGGER.info("Best trial %d: %s, training CV AP %.3f", best.number, best.params["model"], best.value)
+    else:
+        LOGGER.error("No successful trials; returning failure records without a candidate.")
+    environment = reporting.provenance()
     return {
         "schema_version": SCHEMA_VERSION,
         "objective": OBJECTIVE, "direction": "maximize",
@@ -146,13 +164,23 @@ def search(X: pd.DataFrame, y: pd.Series, *, n_trials: int = DEFAULT_TRIALS,
         "sampler": {"name": "TPESampler", "seed": seed},
         "budget": {"n_trials": n_trials, "timeout_seconds": timeout, "n_jobs": 1},
         "trials": {"completed": len(completed), "total": len(study.trials)},
+        "status": "complete" if best is not None else "no_successful_trials",
+        "trial_records": [{"number": trial.number, "state": trial.state.name,
+                           "model": trial.params.get("model"), "sampled_params": trial.params,
+                           "estimator_params": trial.user_attrs.get("estimator_params"),
+                           "estimator_class": trial.user_attrs.get("estimator_class"),
+                           "cv_ap": trial.user_attrs.get("cv_ap"), "value": trial.value,
+                           "failure": trial.user_attrs.get("failure"),
+                           "elapsed_seconds": trial.user_attrs.get("elapsed_seconds")}
+                          for trial in study.trials],
         "elapsed_seconds": round(elapsed, 3),
         "best": {"trial": best.number, "model": best.params["model"], "params": readable(best.params),
-                 "cv_ap": best.user_attrs["cv_ap"]},
+                 "cv_ap": best.user_attrs["cv_ap"], "estimator_params": best.user_attrs["estimator_params"],
+                 "estimator_class": best.user_attrs["estimator_class"]} if best is not None else None,
         "reference": {"dummy_prior": {"tuned": False, "cv_ap": summarize(reference)}},
         "train_rows": len(X), "train_positives": int(y.sum()),
-        "package_versions": {name: importlib.metadata.version(name)
-                             for name in ["optuna", "scikit-learn", "numpy", "pandas"]},
+        "provenance": environment, "package_versions": environment["package_versions"],
+        "training_data": reporting.training_metadata(X, y),
         "holdout_used": False,
         "served_model_changed": False,
         "note": "Training-CV development estimate of a candidate configuration; the chosen trial's CV AP is "
@@ -162,10 +190,9 @@ def search(X: pd.DataFrame, y: pd.Series, *, n_trials: int = DEFAULT_TRIALS,
 
 def check_output(path: Path, models_dir: Path = MODELS_DIR) -> Path:
     """Write only new files outside the models directory, so a search can never touch bundles or current.json."""
+    path = reporting.check_destination(path, models_dir)
     if path.exists():
         raise FileExistsError(f"Refusing to overwrite {path}; choose a new output file.")
-    if path.is_relative_to(models_dir.resolve()):
-        raise ValueError(f"Write search results outside the models directory ({models_dir}).")
     return path
 
 
@@ -195,10 +222,17 @@ def main(argv: list[str] | None = None) -> None:
                         help=f"Stratified training CV folds (default: {CV_FOLDS})")
     parser.add_argument("--data", type=normalize_path, default=DATA_PATH,
                         help=f"Raw CSV (default: ${DATA_ENV} or <root>/{DATA_RELATIVE.as_posix()})")
-    parser.add_argument("--output", type=normalize_path, default=None,
+    outputs = parser.add_mutually_exclusive_group()
+    outputs.add_argument("--report-dir", type=normalize_path,
+                         help="Write JSON/CSV/Markdown into a new run directory under this directory")
+    parser.add_argument("--run-id", help="New report run ID (default: UUID); requires --report-dir")
+    outputs.add_argument("--output", type=normalize_path, default=None,
                         help="Also write the JSON result to this new file (never inside the models directory)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if args.run_id is not None and args.report_dir is None:
+        parser.error("--run-id requires --report-dir")
+    report_path = reporting.run_path(args.report_dir, args.run_id) if args.report_dir else None
     output = check_output(args.output) if args.output else None
     data = load_data(args.data)
     X_train, y_train = training_partition(data)
@@ -207,13 +241,20 @@ def main(argv: list[str] | None = None) -> None:
         result = search(X_train, y_train, n_trials=args.n_trials, timeout=args.timeout, seed=args.seed,
                         folds=args.folds)
     result["data_sha256"] = hashlib.sha256(args.data.read_bytes()).hexdigest()
-    text = json.dumps(result, indent=2, allow_nan=False) + "\n"
+    if report_path:
+        result["run_id"] = report_path.name
+    text = reporting.json_text(result)
+    if report_path:
+        reporting.write_report(result, report_path)
+        LOGGER.info("Wrote report run %s", report_path)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("x", encoding="utf-8") as handle:
             handle.write(text)
         LOGGER.info("Wrote %s", output)
     print(text, end="")
+    if result.get("status") == "no_successful_trials":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
