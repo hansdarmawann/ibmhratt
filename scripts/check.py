@@ -24,6 +24,7 @@ def main() -> None:
         ["pytest", "-q", "--cov", "--cov-report=", "--cov-fail-under=0",
          "--basetemp", str(directory / "pytest"), "-o", f"cache_dir={directory / 'cache'}",
          "--junitxml=reports/test-results.xml"],
+        ["scripts.coverage_report", "pytest-only", "--xml", "reports/coverage-pytest.xml"],
         ["coverage", "run", "--append", "-m", "attrition.models.train", "--with-shap"],
         ["coverage", "report", "--fail-under=80"],
         ["coverage", "xml", "-o", "reports/coverage.xml"],
