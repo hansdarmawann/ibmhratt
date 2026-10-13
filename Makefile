@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-.PHONY: install train explain lint typecheck test coverage check api app notebooks prune automl
+.PHONY: install train explain lint typecheck test coverage check api app notebooks prune automl automl-evaluate
 install:
 	$(PYTHON) -m pip install -r requirements-dev.txt -c requirements-lock.txt
 train:
@@ -32,3 +32,7 @@ prune:
 automl:
 	$(PYTHON) -m pip install -r requirements-automl.txt -c requirements-lock.txt
 	$(PYTHON) -m attrition.models.automl --n-trials 30 --timeout 900 --seed 42
+# Opt-in nested evaluation of that search against the served procedure; about five searches long.
+automl-evaluate:
+	$(PYTHON) -m pip install -r requirements-automl.txt -c requirements-lock.txt
+	$(PYTHON) -m attrition.models.automl_evaluation --n-trials 30 --timeout 900 --seed 42

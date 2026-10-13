@@ -59,11 +59,13 @@ class RecordFit(TransformerMixin, BaseEstimator):
 
 
 def test_importing_automl_needs_no_optuna_and_baseline_never_imports_it():
-    code = ("import sys; import attrition.models.automl; print('optuna' in sys.modules); "
-            "del sys.modules['attrition.models.automl']; import attrition.models.train, app.api; "
-            "print('attrition.models.automl' in sys.modules, 'optuna' in sys.modules)")
+    modules = ["attrition.models.automl", "attrition.models.automl_evaluation"]
+    code = (f"import sys, importlib; [importlib.import_module(name) for name in {modules}]; "
+            f"print('optuna' in sys.modules); [sys.modules.pop(name) for name in {modules}]; "
+            f"import attrition.models.train, app.api; "
+            f"print(*[name in sys.modules for name in {modules}], 'optuna' in sys.modules)")
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=True)
-    assert result.stdout.split() == ["False", "False", "False"]
+    assert result.stdout.split() == ["False", "False", "False", "False"]
 
 
 def test_missing_optuna_names_the_install_command(monkeypatch):
@@ -155,6 +157,28 @@ def test_search_smoke_is_deterministic_and_fits_only_training_folds(optuna, monk
     assert first["train_rows"] == len(X)
     assert first["holdout_used"] is False and first["served_model_changed"] is False
     json.dumps(first, allow_nan=False)
+
+
+@pytest.mark.parametrize("family", automl.FAMILIES)
+def test_candidate_pipeline_rebuilds_the_trial_configuration(optuna, synthetic_data, family):
+    X, _ = automl.training_partition(synthetic_data)
+    bounds = BOUNDS[family][1]
+    pipeline = automl.candidate_pipeline(X, family, bounds, SEED)
+    trial = optuna.trial.FixedTrial({"model": family, **{f"{family}__{k}": v for k, v in bounds.items()}})
+    _, expected = automl.suggest_estimator(trial, SEED)
+    assert pipeline.named_steps["model"].get_params() == expected.get_params()
+    numeric_steps = pipeline.named_steps["preprocess"].transformers[0][1].named_steps
+    assert ("scaler" in numeric_steps) is (family == "logistic_regression")
+    assert not hasattr(pipeline.named_steps["model"], "classes_")
+
+
+def test_best_candidate_reproduces_its_search_score(optuna, synthetic_data):
+    X, y = automl.training_partition(synthetic_data)
+    result = automl.search(X, y, n_trials=1, timeout=120, seed=SEED, folds=FOLDS)
+    best = result["best"]
+    pipeline = automl.candidate_pipeline(X, best["model"], best["params"], SEED)
+    cv = StratifiedKFold(FOLDS, shuffle=True, random_state=SEED)
+    assert automl.cv_scores(pipeline, X, y, cv) == best["cv_ap"]["folds"]
 
 
 def test_search_rejects_invalid_budgets(optuna, synthetic_data):
