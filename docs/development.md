@@ -19,7 +19,7 @@ python -m pytest -q
 
 Alternatively, `conda env create -f environment.yml` creates the named environment using the same package constraints. `requirements-serving.txt` declares API/dashboard dependencies; `requirements.txt` includes those plus training plots. The Docker runtime installs only serving dependencies; `requirements-dev.txt` adds testing, linting, and notebook tools; the lock file pins the packages used for the recorded results. Use the constraints above when reproducing them. Platforms may install different platform-specific transitive dependencies.
 
-If activation is inconvenient, use `conda run --no-capture-output -n ibmhratt python -m attrition.models.train`. In VS Code, select **Python (ibmhratt)** as the interpreter and notebook kernel. All project paths are derived from `src/attrition/config.py`, without machine-specific absolute paths. `requirements-dev.txt` installs the `attrition` package in editable mode, so `python -m attrition...` commands work after installation; paths resolve relative to the checkout, so use an editable install or `PYTHONPATH=src` rather than a regular `pip install .`.
+If activation is inconvenient, use `conda run --no-capture-output -n ibmhratt python -m attrition.models.train`. In VS Code, select **Python (ibmhratt)** as the interpreter and notebook kernel. All project paths are derived from `src/attrition/config.py`, without machine-specific absolute paths. `requirements-dev.txt` installs the `attrition` package in editable mode, so `python -m attrition...` commands work after installation and paths default to the checkout. To use data or artifacts elsewhere, see [Paths and wheel installs](#paths-and-wheel-installs).
 
 Optional SHAP and executed notebooks:
 
@@ -30,6 +30,43 @@ python -m scripts.execute_notebooks
 ```
 
 The four notebooks cover data understanding, EDA, feature engineering, and model experiments. Training must run first because notebooks display its generated figures and metrics. Reusable logic lives in `src/attrition/`; `scripts/build_notebooks.py` regenerates notebook cell sources and clears their outputs.
+
+## Paths and wheel installs
+
+Without overrides, paths resolve relative to the checkout exactly as before. Trusted operators can relocate them with environment variables; no code needs editing:
+
+| Variable | Default | Used for |
+|---|---|---|
+| `ATTRITION_ROOT` | the checkout (for an installed wheel: the working directory) | base for the defaults below and for exported reports |
+| `ATTRITION_DATA_PATH` | `<root>/data/raw/WA_Fn-UseC_-HR-Employee-Attrition.csv` | training data |
+| `ATTRITION_MODELS_DIR` | `<root>/models` | run bundles and the active `current.json` pointer used by the API, dashboard, prediction, drift, and pruning |
+
+Values are read once at import, so restart services after changing them. Blank values are ignored, `~` expands, relative values resolve against the working directory, and both `/` and `\` separators work on Windows. Resolving a path never creates it: readers report a missing file, and only training writes (and `prune` deletes old runs). Joblib bundles can execute code when loaded, so point `ATTRITION_MODELS_DIR` only at directories you trust. API requests can never choose a model or output path: the request schemas forbid extra fields and no endpoint takes a path.
+
+The training CLI also accepts explicit paths, which take precedence over the variables:
+
+```bash
+python -m attrition.models.train --data /srv/hr/attrition.csv --output-root /srv/attrition --models-dir /srv/attrition/bundles
+```
+
+`--output-root` receives `reports/`, `data/processed/`, `examples/employee.json`, and the README results block (only if a `README.md` exists there). Bundles go to `--models-dir`; without it, to `<output-root>/models` when `--output-root` is given, otherwise to `ATTRITION_MODELS_DIR` or `<root>/models`.
+
+A regular (non-editable) wheel works outside the checkout:
+
+```bash
+python -m pip wheel . --no-deps --wheel-dir dist        # or `python -m build` if the build package is installed
+python -m pip install dist/ibmhratt-1.1.0-py3-none-any.whl -c requirements-lock.txt
+python -m attrition.models.predict employee.json --model /srv/attrition/bundles/current.json
+```
+
+Packaging limits:
+
+- The wheel's dependencies come from `requirements-serving.txt` only, so the library and the `predict`, `prune`, and drift CLIs work out of the box. Training also needs matplotlib (`python -m pip install matplotlib -c requirements-lock.txt`), and `--with-shap` needs `requirements-explain.txt`. The requirement files remain the single source; no extras duplicate them.
+- The wheel contains only the `attrition` package. The FastAPI and Streamlit apps (`app/`), raw data, notebooks, and `scripts/` stay in the checkout or container. Set `ATTRITION_MODELS_DIR` before starting the apps to serve external bundles.
+- The repository scripts (`scripts.check`, `compare_reports`, `execute_notebooks`, `verify_delivery`, `build_notebooks`) and the test suite are checkout tooling that assume the default layout. Run them without path overrides.
+- The package declares no license metadata; licensing is an open owner decision.
+
+`tests/test_paths.py` covers the overrides, and `tests/test_packaging.py` builds the wheel from a minimal source copy, installs it into a separate directory, and runs prediction from outside the checkout.
 
 ## Testing and reproducibility
 
