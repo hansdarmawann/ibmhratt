@@ -99,6 +99,10 @@ The JSON on stdout records the objective, fold and sampler seeds, budget, comple
 
 For inspectable per-trial JSON/CSV and a paired comparison table, use `--report-dir` and an optional new `--run-id` on either AutoML CLI. See [Experiment tracking](automl-experiments.md) for the schema, failure handling, protected paths, reconstruction and reproducibility limits. Existing `--output` commands remain supported.
 
+[Manual candidate promotion](automl-promotion.md) is a separate operator command. It requires an explicit
+trial choice, matching search/nested evidence, artifact and serving checks, and a documented owner approval
+before changing the current-run pointer. Search and evaluation never activate candidates.
+
 Limits: the best trial's CV AP is optimistic, because the same folds chose it. It is a development estimate for a candidate configuration, not a final performance estimate and not comparable to the holdout table. The search does not fit a final model, choose a decision threshold, write a bundle, or change `models/current.json`. A less biased estimate of the whole search procedure needs nested CV; see the next section. Promoting a candidate would need a separate, reviewed change.
 
 ### Nested evaluation of the AutoML procedure

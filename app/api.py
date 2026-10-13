@@ -136,6 +136,8 @@ def load_model(path: str | Path) -> tuple[Pipeline, dict | None]:
         return load_legacy_pipeline(path), None
     bundle = load_bundle(path)
     metrics = bundle.report["selected_model_metrics"]
+    if metrics is None and bundle.report.get("model_origin") == "automl":
+        return bundle.pipeline, None  # Development estimates must never be presented as holdout results.
     return bundle.pipeline, {key: metrics[key] for key in HOLDOUT_KEYS}
 
 

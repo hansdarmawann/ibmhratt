@@ -39,6 +39,12 @@ def show_table(directory: Path, name: str) -> None:
 
 def render_project_overview(_bundle: Bundle) -> None:
     st.header("Can the sample data distinguish attrition from retention?")
+    if _bundle.report.get("model_origin") == "automl":
+        st.write("This AutoML candidate was explicitly selected for the educational demo. "
+                 "Its configuration and OOF F2 threshold use the original training partition only.")
+        st.info("No holdout evaluation was performed for this candidate. Development estimates do not establish "
+                "generalization, calibration, or suitability for individual employment decisions.")
+        return
     st.write("Compare a trivial baseline, logistic regression, a random forest, and gradient boosting. "
              "The project prioritizes average precision and recall of observed attrition cases.")
     st.markdown("**Workflow:** validate → stratified split → training-only EDA → fold-fitted preprocessing "
@@ -47,6 +53,11 @@ def render_project_overview(_bundle: Bundle) -> None:
 
 
 def render_dataset_overview(bundle: Bundle) -> None:
+    if bundle.report.get("model_origin") == "automl":
+        st.metric("Training rows", bundle.report["train_rows"])
+        st.info("This bundle uses the original training partition. Full dataset audit reports remain with "
+                "the baseline experiment.")
+        return
     audit_path = bundle.metrics_dir / "data_audit.json"
     if audit_path.exists():
         audit = json.loads(audit_path.read_text(encoding="utf-8"))
@@ -63,6 +74,9 @@ def render_dataset_overview(bundle: Bundle) -> None:
 
 
 def render_exploratory_analysis(bundle: Bundle) -> None:
+    if bundle.report.get("model_origin") == "automl":
+        st.info("Exploratory plots were not regenerated for this candidate. Baseline reports remain separate.")
+        return
     figures_dir = bundle.figures_dir
     st.write("All exploratory plots use the training partition. Associations do not establish causality.")
     show_figure(figures_dir, "categorical_attrition.png", "Observed group rates; sample sizes differ.")
@@ -76,6 +90,19 @@ def render_model_performance(bundle: Bundle) -> None:
     if not report:
         return
     st.write(report["selection_reason"])
+    if report.get("model_origin") == "automl":
+        development = report["development_evaluation"]
+        st.info("Training-only development estimates; no final holdout metrics are available for this candidate.")
+        st.write(development["interpretation"])
+        st.caption("Nested CV assesses the full search and threshold procedure, not this particular fitted candidate. "
+                   "The selected trial's reused-fold CV score is optimistic and is not an independent test.")
+        rows = [{"Procedure": name, "Nested CV AP mean": values["pr_auc"]["mean"],
+                 "Fold SD": values["pr_auc"]["std"]}
+                for name, values in development["procedures"].items()]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.caption(f"Frozen training OOF threshold: {report['selected_threshold']:.2f}. " + report["threshold_rule"])
+        show_table(metrics_dir, "threshold_analysis.csv")
+        return
     m = report["selected_model_metrics"]
     columns = st.columns(4)
     for column, key, label in zip(columns, ["pr_auc", "recall", "precision", "f1"],
@@ -175,6 +202,10 @@ def render_prediction_demo(bundle: Bundle) -> None:
 
 
 def render_feature_importance(bundle: Bundle) -> None:
+    if bundle.report.get("model_origin") == "automl":
+        st.info("Global feature importance was not computed for this candidate. Profile explanations, when "
+                "available, describe associations rather than causal effects.")
+        return
     show_figure(bundle.figures_dir, "feature_importance.png", "Decrease in holdout average precision when a feature is shuffled")
     show_table(bundle.metrics_dir, "permutation_importance.csv")
     show_figure(bundle.figures_dir, "logistic_coefficients.png", "Numeric coefficients are per training-standard-deviation change; categories are encoded indicators.")
@@ -184,6 +215,10 @@ def render_feature_importance(bundle: Bundle) -> None:
 
 def render_model_explanation(bundle: Bundle) -> None:
     report = bundle.report
+    if report.get("model_origin") == "automl":
+        st.info("Global SHAP reports are unavailable for this candidate. Optional local explanations use only "
+                "the training background stored with the bundle.")
+        return
     if report and report["shap"]["status"] == "generated":
         st.write("SHAP units:", report["shap"]["units"])
         show_figure(bundle.figures_dir, "shap_summary.png", "Global summary for up to 60 held-out sample records")
@@ -198,12 +233,14 @@ def render_responsible_ml(bundle: Bundle) -> None:
     st.write("Gender, Age, and MaritalStatus are included only for this comparative educational analysis. "
              "Their suitability for any HR application requires separate governance. Removing them does not "
              "remove proxies in job role, income, tenure, or other variables.")
-    if bundle.report:
+    if bundle.report.get("sensitive_ablation"):
         st.write(f"Training CV AP change without the three sensitive attributes: "
                  f"{bundle.report['sensitive_ablation']['cv_ap_change']:+.3f}.")
         st.caption("Lower/upper columns are 95% stratified bootstrap intervals within each group for the frozen "
                    "model and threshold; empty intervals mean the group has no rows of that class.")
         show_table(bundle.metrics_dir, "subgroup_metrics.csv")
+    elif bundle.report.get("model_origin") == "automl":
+        st.info("Sensitive-feature ablation and subgroup evaluation have not been performed for this candidate.")
     st.write("Subgroup estimates have small denominators and substantial uncertainty. These descriptive slices "
              "do not establish fairness. Require human oversight, privacy controls, calibration, temporal "
              "validation, and a defined support-oriented purpose before considering any real-world use.")

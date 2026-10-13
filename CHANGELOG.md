@@ -9,6 +9,11 @@ prove that an image or GitHub Release has been published.
 
 ### Added
 
+- An operator-only AutoML candidate preparation, manual approval, atomic activation,
+  and receipt-based rollback CLI (`python -m attrition.models.promotion`). Preparation
+  uses the original training partition and preserves baseline reports and prior bundles.
+  Candidate API/dashboard views label development evidence without claiming holdout scores.
+
 - A release guide defining semantic versioning, compatibility commitments,
   owner release steps, validation evidence, and rollback.
 - A read-only release eligibility command checking the publication ref, package
