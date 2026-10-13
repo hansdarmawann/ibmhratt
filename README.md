@@ -108,6 +108,7 @@ flowchart TD
 | Guide | Contents |
 |---|---|
 | [Data and methodology](docs/methodology.md) | Business problem, dataset and exclusions, EDA, model comparison, threshold selection, explainability, training diagnostics, limitations |
+| [Model card](docs/model-card.md) | Provenance, intended and prohibited use, splits, baseline versus AutoML, metric definitions, uncertainty, calibration, subgroup and explanation limits, reproducibility, with every figure sourced to an artifact |
 | [Responsible AI](docs/responsible-ai.md) | Sensitive attributes, subgroup metrics and their uncertainty, conditions for any real use |
 | [Serving and operations](docs/serving.md) | API with example responses, dashboard, Docker, versioned bundles and pruning, drift checks |
 | [Development](docs/development.md) | Installation, tests and the local quality gate, optional AutoML search and its nested evaluation, CI/CD, supply-chain pinning |
@@ -152,7 +153,7 @@ ibmhratt/
 
 ## Limitations
 
-The data is a small, fictional, cross-sectional sample with no temporal validation, and a single holdout split is used. The test set has 294 rows and 47 attrition cases, so metrics such as recall move noticeably with a few predictions; the bootstrap intervals above capture holdout sampling variability only. Scores are uncalibrated probability estimates, and associations are not causal. The published holdout has already been examined, so it is not a fresh independent benchmark for further model iterations. See [limitations and future work](docs/methodology.md#limitations-and-future-improvements).
+The data is a small, fictional, cross-sectional sample with no temporal validation, and a single holdout split is used. The test set has 294 rows and 47 attrition cases, so metrics such as recall move noticeably with a few predictions; the bootstrap intervals above capture holdout sampling variability only. Scores are uncalibrated probability estimates, and associations are not causal. The published holdout has already been examined, so it is not a fresh independent benchmark for further model iterations. See [limitations and future work](docs/methodology.md#limitations-and-future-improvements) and the [model card](docs/model-card.md).
 
 ## Licensing status
 
