@@ -269,65 +269,70 @@ def engineering_ablation(summaries: dict, fold_metrics: pd.DataFrame) -> dict:
             "note": "Even when the rule is met, adoption needs validation on data not used for these choices."}
 
 
-def compare_models(parts: Partitions, cv, paths: RunPaths) -> tuple[dict, dict, dict]:
-    """Cross-validate candidates plus the fixed ablations; return candidates, summaries, engineering ablation."""
-    pipelines = candidate_pipelines(parts.X_train)
+def compare_models(X_train: pd.DataFrame, y_train: pd.Series, cv, paths: RunPaths) -> tuple[dict, dict, dict]:
+    """Compare candidates and fixed ablations using only the supplied training partition."""
+    pipelines = candidate_pipelines(X_train)
     summaries = {}
     fold_tables = []
     for name, pipeline in pipelines.items():
         LOGGER.info("Cross-validating %s", name)
-        summaries[name], folds = cross_validation_metrics(pipeline, parts.X_train, parts.y_train, cv)
+        summaries[name], folds = cross_validation_metrics(pipeline, X_train, y_train, cv)
         fold_tables.append(folds.assign(model=name))
     # Fixed diagnostic experiments, not extra candidates for final selection.
     for name, excluded, engineered in [("logistic_without_sensitive", SENSITIVE_COLUMNS, False),
                                        ("logistic_reduced_correlations", REDUNDANT_COLUMNS, False),
                                        ("logistic_engineered_features", [], True)]:
         estimator = LogisticRegression(C=1.0, max_iter=2000, random_state=RANDOM_STATE)
-        pipeline = build_pipeline(parts.X_train, estimator, exclude=excluded, engineered=engineered)
-        summaries[name], folds = cross_validation_metrics(pipeline, parts.X_train, parts.y_train, cv)
+        pipeline = build_pipeline(X_train, estimator, exclude=excluded, engineered=engineered)
+        summaries[name], folds = cross_validation_metrics(pipeline, X_train, y_train, cv)
         fold_tables.append(folds.assign(model=name))
     fold_metrics = pd.concat(fold_tables)
     fold_metrics.to_csv(paths.metrics / "cv_fold_metrics.csv")
     return pipelines, summaries, engineering_ablation(summaries, fold_metrics)
 
 
-def choose_operating_point(pipelines: dict, summaries: dict, parts: Partitions, cv,
-                           paths: RunPaths) -> OperatingPoint:
+def choose_operating_point(pipelines: dict, summaries: dict, X_train: pd.DataFrame,
+                           y_train: pd.Series, cv, paths: RunPaths) -> OperatingPoint:
     """Select the model on training CV AP, then its threshold on training OOF F2."""
     selected, reason = select_model({name: summaries[name] for name in pipelines})
     LOGGER.info("Selected %s using training CV", selected)
-    oof = cross_val_predict(pipelines[selected], parts.X_train, parts.y_train, cv=cv,
+    oof = cross_val_predict(pipelines[selected], X_train, y_train, cv=cv,
                             method="predict_proba", n_jobs=1)[:, 1]
-    thresholds = threshold_table(parts.y_train, oof)
+    thresholds = threshold_table(y_train, oof)
     threshold = select_threshold(thresholds)
     thresholds.to_csv(paths.metrics / "threshold_analysis.csv", index=False)
-    pd.DataFrame({"row_index": parts.X_train.index, "target": parts.y_train.to_numpy(),
+    pd.DataFrame({"row_index": X_train.index, "target": y_train.to_numpy(),
                   "oof_probability": oof}).to_csv(paths.processed / "oof_predictions.csv", index=False)
     return OperatingPoint(selected, reason, oof, thresholds, threshold)
 
 
-def training_diagnostics(pipelines: dict, summaries: dict, point: OperatingPoint, parts: Partitions,
-                         paths: RunPaths) -> Diagnostics:
+def training_diagnostics(pipelines: dict, summaries: dict, point: OperatingPoint, X_train: pd.DataFrame,
+                         y_train: pd.Series, paths: RunPaths) -> Diagnostics:
     """Calibration, seed stability, and nested CV on training rows; none changes the served model."""
     LOGGER.info("Running training-only calibration and stability diagnostics")
     calibration_scores, calibration_bins, calibration_oof = calibration_diagnostics(
-        pipelines[point.selected], parts.X_train, parts.y_train)
+        pipelines[point.selected], X_train, y_train)
     calibration_scores.to_csv(paths.metrics / "calibration_metrics.csv", index=False)
     calibration_bins.to_csv(paths.metrics / "calibration_bins.csv", index=False)
     calibration_oof.to_csv(paths.processed / "calibration_oof.csv", index=False)
     save_calibration_plot(calibration_bins, paths.figures)
     repeat_scores, repeat_choices = stability_diagnostics(
-        pipelines, parts.X_train, parts.y_train, select_model,
+        pipelines, X_train, y_train, select_model,
         baseline=({name: summaries[name] for name in pipelines}, point.selected, point.oof))
     repeat_scores.to_csv(paths.metrics / "stability_comparison.csv", index=False)
     repeat_choices.to_csv(paths.metrics / "stability_selections.csv", index=False)
-    nested_folds = nested_cv(pipelines, parts.X_train, parts.y_train, select_model)
+    nested_folds = nested_cv(pipelines, X_train, y_train, select_model)
     nested_folds.to_csv(paths.metrics / "nested_cv_folds.csv", index=False)
     return Diagnostics(calibration_scores, repeat_choices, nested_summary(nested_folds))
 
 
 def evaluate_holdout(pipelines: dict, point: OperatingPoint, parts: Partitions, paths: RunPaths) -> HoldoutResults:
-    """Fit candidates on training rows and evaluate the frozen choice once on the holdout."""
+    """Evaluate after selection is frozen; other candidates are descriptive diagnostics.
+
+    All candidates are scored at 0.50, and the selected model also at its OOF
+    threshold. Bootstrap, subgroup, capacity, and permutation diagnostics reuse
+    this holdout. None of these results may feed back into selection or tuning.
+    """
     LOGGER.info("Threshold frozen at %.2f; starting final holdout evaluation", point.threshold)
     probabilities, at_default = {}, {}
     for name, pipeline in pipelines.items():
@@ -457,9 +462,11 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
     LOGGER.info("Model training started")
     parts = prepare_data(data_path, paths)
     cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_STATE)
-    pipelines, summaries, engineering = compare_models(parts, cv, paths)
-    point = choose_operating_point(pipelines, summaries, parts, cv, paths)
-    diagnostics = training_diagnostics(pipelines, summaries, point, parts, paths)
+    # Selection stages receive training data only, never the combined partitions
+    # or any holdout results. Keep every selection ahead of evaluate_holdout.
+    pipelines, summaries, engineering = compare_models(parts.X_train, parts.y_train, cv, paths)
+    point = choose_operating_point(pipelines, summaries, parts.X_train, parts.y_train, cv, paths)
+    diagnostics = training_diagnostics(pipelines, summaries, point, parts.X_train, parts.y_train, paths)
     holdout = evaluate_holdout(pipelines, point, parts, paths)
     shap_status = (explain_shap(pipelines[point.selected], parts.X_train, parts.X_test, paths.metrics, paths.figures)
                    if with_shap else {"status": "not_requested", "enable": "python -m attrition.models.train --with-shap"})
