@@ -12,6 +12,8 @@ htmlcov/
 models/*.joblib
 models/*.json
 models/runs/
+models/promotions/
+models/.promotion.lock
 models/.current-*.tmp
 .test-tmp/
 *.egg-info/

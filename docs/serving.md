@@ -152,6 +152,14 @@ Each training run adds a bundle. `python -m attrition.models.prune --keep 5` rem
 
 The existing `reports/`, `data/processed/`, and `examples/` paths remain reproducible exports. Git reports omit runtime UUIDs. Schema-1 files can still be loaded explicitly with `python -m attrition.models.predict examples/employee.json --model <file>.joblib`. Pickles record module paths, so artifacts trained before the package moved from `src` to `attrition` fail with a clear "retrain" error; run `python -m attrition.models.train` to replace them.
 
+## Manual AutoML promotion
+
+Approved AutoML candidates use a separate [manual promotion and rollback workflow](automl-promotion.md).
+Their bundles contain development evidence without candidate holdout scores: `/model` returns
+`holdout_metrics: null`, and the dashboard labels the estimates accordingly. Baseline report exports
+remain historical baseline evidence. Restart the API after activation or rollback; retain prior bundles
+and receipts throughout the rollback period before considering pruning.
+
 ## Input drift monitoring
 
 Each bundle stores `reference_profile.json`: training-row deciles for numeric features, category shares, and missing rates. The drift check compares new records with that profile using the Population Stability Index (PSI) per feature:
