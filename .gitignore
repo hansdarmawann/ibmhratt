@@ -22,5 +22,6 @@ data/processed/*
 *.log
 coverage.xml
 reports/coverage.xml
+reports/coverage-pytest.xml
 reports/test-results.xml
 "instructions.md" 
