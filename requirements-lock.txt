@@ -1,7 +1,11 @@
 # Verified ibmhratt environment: Python 3.12; use with pip install -c.
 Jinja2==3.1.6
+Mako==1.4.3
 MarkupSafe==3.0.4
+PyYAML==6.0.3
 Pygments==2.21.0
+SQLAlchemy==2.1.4
+alembic==1.20.0
 altair==6.3.0
 annotated-doc==0.0.5
 annotated-types==0.8.0
@@ -14,6 +18,7 @@ charset-normalizer==3.5.2
 click==8.5.0
 cloudpickle==3.1.2
 colorama==0.4.6
+colorlog==6.12.0
 comm==0.2.3
 contourpy==1.4.0
 coverage==7.16.2
@@ -53,6 +58,7 @@ nest-asyncio2==1.7.3
 numba==0.68.0
 numpy==2.5.3
 opentelemetry-api==1.45.1
+optuna==5.0.0
 packaging==26.3
 pandas==3.0.6
 parso==0.8.7

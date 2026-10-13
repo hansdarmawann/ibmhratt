@@ -1,0 +1,3 @@
+-r requirements.txt
+# Optional training-CV AutoML search (python -m attrition.models.automl); never needed for serving.
+optuna>=5.0,<6
