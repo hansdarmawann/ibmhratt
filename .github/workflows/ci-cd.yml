@@ -59,6 +59,9 @@ jobs:
         run: >-
           python -m pytest -q --junitxml=reports/test-results.xml
           --cov --cov-report=term --cov-fail-under=0
+      - name: Enforce pytest-only coverage (before training is measured)
+        # The database holds only lines executed by the test suite here; the training run below appends to it.
+        run: python -m scripts.coverage_report pytest-only --xml reports/coverage-pytest.xml
       - name: Train from the canonical raw dataset
         run: python -m coverage run --append -m attrition.models.train --with-shap
       - name: Enforce combined test and training coverage

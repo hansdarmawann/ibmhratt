@@ -73,12 +73,26 @@ Packaging limits:
 ```bash
 python -m ruff check .
 python -m mypy
-python -m pytest -q --cov --cov-report=term --cov-fail-under=0
+python -m pytest -q --cov --cov-report= --cov-fail-under=0
+python -m scripts.coverage_report pytest-only
 python -m scripts.execute_notebooks
 python -m scripts.verify_delivery
 ```
 
-The pytest suite includes unit tests and integration tests. Tests cover loading/schema failures against the canonical `data/raw/` CSV, disjoint stratified partitions, train-only imputation statistics, unknown categories/nulls, dictionary/batch prediction, serialization parity, stored threshold use, known confusion counts, API validation and unavailable-model behavior, model-selection and threshold tie-break rules, subgroup denominators, README result injection, deterministic bootstrap intervals, and an automated Streamlit form submission. Test fixtures train a small real pipeline; tests do not require a pretrained production artifact or manual interaction.
+### Two coverage figures
+
+Coverage answers different questions depending on what ran, so every report is labeled:
+
+| Label | What is measured | Gate | Where |
+|---|---|---|---|
+| `pytest-only` | Lines executed while the test suite ran. Training, plotting, and SHAP lines count only if a test reaches them. | `PYTEST_ONLY_MIN` in `scripts/coverage_report.py` (currently **84%**) | CI step before training; `make coverage`; `python -m scripts.check` |
+| `combined` | The test suite plus a fresh `python -m attrition.models.train --with-shap`. Lines run by the training command are "covered" without any assertion. | `fail_under = 80` in `pyproject.toml` (unchanged) | CI and `python -m scripts.check` after training |
+
+How the pytest-only floor was chosen: before the behavioral tests of PR 07 the suite measured **83%** pytest-only (126 tests); with them it measures **86%** (550 passed, 7 strict `xfail`) on Windows with Python 3.12. The floor is two points below the measurement to absorb platform-specific lines, not a target. Lowering it needs a stated reason; raising it should come with tests that assert behavior, not with smoke tests that only execute lines. The remaining uncovered code is mostly plotting (`visualization/plots.py`), SHAP (`models/explain.py`), data exploration (`data/explore.py`), the training orchestration branches in `models/train.py` (covered by the separate training run), and Streamlit presentation branches; a line count there says little about correctness, so the tests concentrate on observable behavior instead: schema and boundary errors, authentication order, unusable or incompatible artifacts, external paths, and command-line contracts. `reports/coverage-pytest.xml` is a generated, gitignored report.
+
+Known gaps are recorded as strict `xfail` tests rather than hidden: corrupt legacy `.joblib` files raise raw `struct.error`/`KeyError`/`EOFError` instead of a clear `ValueError`, and an active-run pointer that is valid JSON but not an object raises `AttributeError` instead of "Invalid active-run pointer." Both fail safely (nothing is loaded or pruned; the API answers 503). When the source is fixed the strict `xfail` fails and should be converted to a normal test.
+
+The pytest suite includes unit tests and integration tests. Tests cover loading/schema failures against the canonical `data/raw/` CSV, disjoint stratified partitions, train-only imputation statistics, unknown categories/nulls, dictionary/batch prediction, serialization parity, stored threshold use, known confusion counts, API validation and unavailable-model behavior, model-selection and threshold tie-break rules, subgroup denominators, README result injection, deterministic bootstrap intervals, and an automated Streamlit form submission. Behavioral regression tests (PR 07) add inclusive numeric bounds for every field through the API and validators, required/nullable/wrongly typed fields, authentication rejection and ordering for every protected endpoint, safe 503/500 bodies and logs, incompatible schema/threshold/class metadata, mixed or tampered bundles, relocated models directories with spaces and non-ASCII names, line-ending independence, and the `predict`, `prune`, `train`, and drift command-line contracts. Test fixtures train a small real pipeline; tests do not require a pretrained production artifact or manual interaction.
 
 After training and notebook execution, `scripts.verify_delivery` also checks the delivered artifact against its recorded metrics and bootstrap point estimates, OOF coverage, SHAP additivity, executed notebook cells, and actual loopback HTTP startup/prediction for both services. Its temporary servers are stopped automatically.
 
@@ -95,13 +109,13 @@ python -m pip install -r requirements-dev.txt -r requirements-explain.txt -c req
 python -m scripts.check
 ```
 
-This runs lint, type checking, all tests, fresh training, combined coverage (minimum 80%), notebook regeneration/execution, and live service verification. Tests alone can report lower coverage because training and plotting are exercised by the separate integration run. Temporary files and the coverage database use a unique directory under `.test-tmp/`; reports and notebooks are regenerated. In a restricted Windows sandbox, pytest's private-directory ACLs may require running this command with the sandbox's approved execution access. No assertions are skipped to work around permissions.
+This runs lint, type checking, all tests, a labeled pytest-only coverage gate (see [Two coverage figures](#two-coverage-figures)), fresh training, combined coverage (minimum 80%), notebook regeneration/execution, and live service verification. Tests alone can report lower coverage because training and plotting are exercised by the separate integration run. Temporary files and the coverage database use a unique directory under `.test-tmp/`; reports and notebooks are regenerated. In a restricted Windows sandbox, pytest's private-directory ACLs may require running this command with the sandbox's approved execution access. No assertions are skipped to work around permissions.
 
 ## CI/CD: GitHub Actions and GHCR
 
 [`.github/workflows/ci-cd.yml`](../.github/workflows/ci-cd.yml) runs on pull requests, pushes to `main`, version tags matching `v*`, manual dispatch, and weekly on Mondays so newly published advisories surface even without code changes. Scheduled runs never publish.
 
-- **CI:** Python 3.12 on Ubuntu and Windows, constrained dependency installation, `pip check`, Ruff lint, mypy type checking, all pytest tests with coverage, fresh training with SHAP measured in the same coverage database, a combined 80% coverage gate, a check that the committed README and `reports/results.md` match the fresh run, a tolerant comparison of every committed metrics file and figure name (`python -m scripts.compare_reports`), notebook execution, and delivery verification including live API/dashboard startup. Test results and generated model/report artifacts are retained for 14 days.
+- **CI:** Python 3.12 on Ubuntu and Windows, constrained dependency installation, `pip check`, Ruff lint, mypy type checking, all pytest tests with coverage, a pytest-only coverage gate evaluated before training, fresh training with SHAP measured in the same coverage database, a combined 80% coverage gate, a check that the committed README and `reports/results.md` match the fresh run, a tolerant comparison of every committed metrics file and figure name (`python -m scripts.compare_reports`), notebook execution, and delivery verification including live API/dashboard startup. Test results and generated model/report artifacts are retained for 14 days.
 - **Dependency audit:** `pip-audit` checks every package pinned in `requirements-lock.txt` against known vulnerabilities and fails on any finding.
 - **Container validation:** after both CI jobs and the audit pass, build the Docker image, test its real `/health` and `/predict` endpoints, and scan it with Trivy, failing on fixable high or critical vulnerabilities in OS or Python packages. Pull requests, manual runs, and scheduled runs build and test without publishing.
 - **CD (continuous delivery):** after container validation passes on a push to `main` or a `v*` tag, publish that same tested image to `ghcr.io/<owner>/<repository>`. Main publishes `latest` and a commit SHA tag; version tags publish the Git tag and a commit SHA tag. This delivers a container image; running it on a server is a separate deployment step.

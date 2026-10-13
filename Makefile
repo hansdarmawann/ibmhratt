@@ -14,8 +14,10 @@ typecheck:
 	$(PYTHON) -m mypy
 test:
 	$(PYTHON) -m pytest -q
+# Pytest-only coverage: the training run is not included (`make check` runs the combined gate).
 coverage:
-	$(PYTHON) -m pytest -q --cov --cov-report=term --cov-fail-under=0
+	$(PYTHON) -m pytest -q --cov --cov-report= --cov-fail-under=0
+	$(PYTHON) -m scripts.coverage_report pytest-only
 check:
 	$(PYTHON) -m scripts.check
 api:
