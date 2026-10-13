@@ -13,6 +13,12 @@ prove that an image or GitHub Release has been published.
   owner release steps, validation evidence, and rollback.
 - A read-only release eligibility command checking the publication ref, package
   version, reviewed-main ancestry, and dated notes for version tags.
+- An opt-in nested cross-validation evaluation of the optional AutoML procedure
+  (`python -m attrition.models.automl_evaluation`, `make automl-evaluate`). It
+  uses training data only. Each outer training fold runs the Optuna search on
+  inner folds, then chooses an out-of-fold F2 threshold. The served procedure is
+  compared on the same folds. Development estimates only; the served model is
+  unchanged.
 
 ### Changed
 

@@ -97,7 +97,37 @@ How the search works:
 
 The JSON on stdout records the objective, fold and sampler seeds, budget, completed trials, the best trial's family, parameters, and per-fold CV AP, the dummy reference, training row counts, package versions, and the data SHA-256. Its `holdout_used` and `served_model_changed` fields are always `false`.
 
-Limits: the best trial's CV AP is optimistic, because the same folds chose it. It is a development estimate for a candidate configuration, not a final performance estimate and not comparable to the holdout table. The search does not fit a final model, choose a decision threshold, write a bundle, or change `models/current.json`. An unbiased estimate of the whole search procedure needs nested CV. Promoting a candidate would need a separate, reviewed change.
+Limits: the best trial's CV AP is optimistic, because the same folds chose it. It is a development estimate for a candidate configuration, not a final performance estimate and not comparable to the holdout table. The search does not fit a final model, choose a decision threshold, write a bundle, or change `models/current.json`. A less biased estimate of the whole search procedure needs nested CV; see the next section. Promoting a candidate would need a separate, reviewed change.
+
+### Nested evaluation of the AutoML procedure
+
+`attrition.models.automl_evaluation` estimates the complete AutoML procedure, including a threshold, rather than the best trial's optimistic score. It uses nested CV inside the training partition and compares the result with the served baseline procedure on the same folds.
+
+```bash
+python -m attrition.models.automl_evaluation --n-trials 30 --timeout 900 --seed 42 --output ~/attrition-automl/nested-seed42.json
+```
+
+`make automl-evaluate` runs the same command without `--output`. It repeats the search once per outer fold, so it takes roughly five searches. CI runs only small synthetic tests with one trial; the real-data check in `tests/test_automl_evaluation.py` is opt-in (`ATTRITION_SLOW_TESTS=1`).
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--n-trials` | 30 | Trial budget of each outer fold's search |
+| `--timeout` | 900 | Seconds after which each outer fold's search starts no new trial |
+| `--seed` | 42 | Seeds the outer and inner folds, the TPE sampler, and every estimator |
+| `--outer-folds` | 5 | Stratified outer folds of the training partition (2–10) |
+| `--data` | `ATTRITION_DATA_PATH` or the checkout CSV | Raw CSV, validated like training |
+| `--output` | none | Also write the JSON to this **new** file; existing files and anything inside the models directory are refused |
+
+How the evaluation works:
+
+- The CSV is validated and split exactly like training, and only the training partition is used. Seeded stratified outer folds split it; with the defaults they are the outer folds of the training report's `nested_cv_folds.csv`.
+- Inside each outer training fold, and on those rows only, the AutoML procedure runs in a fixed order. First, the Optuna search scores trials on five seeded stratified inner folds and keeps the best mean AP. Then the chosen configuration is rebuilt, and its inner out-of-fold probabilities choose the threshold by maximum F2, with the same grid and tie-breaks as baseline training. Finally it is refitted on the outer training rows. Only then is it scored, once, on the outer validation rows.
+- The baseline arm runs the served procedure (fixed candidates, the prefer-logistic AP rule, and the OOF F2 threshold) on the same outer training rows and the same inner folds. With the defaults it reproduces the `fixed` rows of `nested_cv_folds.csv`.
+- Every fit, including preprocessing, happens on inner or outer training rows. Outer validation rows are used only for the final score; holdout rows are never loaded into the evaluation.
+
+The JSON records one row per procedure and outer fold: the chosen family and parameters, the threshold, the AutoML best trial's inner CV AP and completed trials, and outer AP, ROC-AUC, precision, recall, and F1. It also records each procedure's mean and population SD, selection counts, and threshold range. The paired comparison gives AutoML minus baseline per metric (mean, SD, minimum, maximum, and the folds favoring each). `automl_selection_optimism` is the mean inner best-trial AP minus the mean outer AP. Seeds, fold settings, budget, package versions, the data SHA-256, and elapsed time are recorded; `holdout_used` and `served_model_changed` are always `false`.
+
+Reading the result: these are training-only development estimates, not a new final test. The outer folds share most of their training rows, so the per-fold differences are not independent; no standard error, t-test, or p-value is reported because one computed from them would overstate certainty. On this small fictional dataset, a small mean difference, or most folds favoring one procedure, is not evidence that it generalizes better. The published holdout has already been examined and must not be used to choose between the procedures; confirming a difference would need new independent data. Nothing here changes the served model.
 
 ## Testing and reproducibility
 

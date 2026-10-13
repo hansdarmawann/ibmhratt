@@ -87,6 +87,14 @@ def suggest_estimator(trial: "optuna.Trial", seed: int) -> tuple[str, Any]:
         early_stopping=False, random_state=seed)
 
 
+def candidate_pipeline(X: pd.DataFrame, model: str, params: dict, seed: int):
+    """Unfitted pipeline for a searched configuration, built by the same code path as its trial."""
+    optuna = require_optuna()
+    trial = optuna.trial.FixedTrial({"model": model, **{f"{model}__{key}": value for key, value in params.items()}})
+    family, estimator = suggest_estimator(trial, seed)
+    return build_pipeline(X, estimator, scale=family == "logistic_regression")
+
+
 def cv_scores(pipeline, X: pd.DataFrame, y: pd.Series, cv) -> list[float]:
     """Per-fold AP; the whole pipeline, including preprocessing, is refitted inside each training fold."""
     scores = cross_val_score(pipeline, X, y, cv=cv, scoring=OBJECTIVE, n_jobs=1, error_score="raise")
