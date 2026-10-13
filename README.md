@@ -110,10 +110,10 @@ flowchart TD
 | [Data and methodology](docs/methodology.md) | Business problem, dataset and exclusions, EDA, model comparison, threshold selection, explainability, training diagnostics, limitations |
 | [Responsible AI](docs/responsible-ai.md) | Sensitive attributes, subgroup metrics and their uncertainty, conditions for any real use |
 | [Serving and operations](docs/serving.md) | API with example responses, dashboard, Docker, versioned bundles and pruning, drift checks |
-| [Development](docs/development.md) | Installation, tests and the local quality gate, CI/CD, supply-chain pinning |
-| [Releases](docs/releases.md) | Versioning, compatibility, changelog, publication gates, owner release steps and rollback |
+| [Development](docs/development.md) | Installation, tests and the local quality gate, optional AutoML search, CI/CD, supply-chain pinning |
 | [Contributing](CONTRIBUTING.md) | Setup, checks, pull request guidelines, ML evaluation rules, no-real-data policy |
 | [Security policy](SECURITY.md) | Private vulnerability reporting and known sensitive areas |
+| [Releases](docs/releases.md) | Versioning, compatibility, changelog, publication gates, owner release steps and rollback |
 
 ## Repository structure
 
