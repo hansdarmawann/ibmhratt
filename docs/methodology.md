@@ -39,6 +39,23 @@ The primary comparison is **average precision (AP)**, labeled `pr_auc` in JSON. 
 
 The prespecified selection rule chooses the highest training CV AP, preferring unweighted logistic regression, then balanced logistic regression, if within 0.01 AP of the best candidate. This makes the interpretability/complexity tradeoff explicit. The diagnostic sensitive/correlated-feature ablations do not become additional candidates. Test results never change the rule.
 
+## Evaluation boundaries
+
+| Stage | Data available | Purpose and limits |
+|---|---|---|
+| Split and exploration | Structural validation of the raw data; EDA on the 80% training partition only | A seeded, stratified 20% holdout is reserved before exploration or fitting. Schema checks do not learn preprocessing statistics. |
+| Ordinary CV | Five folds within training | Compare fixed candidates by mean AP. Each fold fits normalization, imputation, scaling, encoding, and the estimator together in a pipeline. The chosen candidate's CV score reuses the selection folds and can be optimistic. |
+| Model and OOF threshold selection | Training CV summaries and training OOF predictions only | Freeze the model by the prespecified AP rule, then maximize OOF F2. These threshold scores are selection diagnostics, not an independent performance estimate. |
+| Nested CV | Outer and inner folds entirely within training | Repeat candidate comparison, optional grid tuning, and OOF threshold choice inside each outer training fold. Score the frozen result on that fold's outer validation rows. This assesses the selection procedure, including its threshold rule. |
+| Calibration, stability, and feature ablations | Training rows only | Calibration uses inner folds inside outer training folds; stability repeats training CV. Sensitive, correlated, and engineered-feature ablations use training CV and remain outside the candidate set. None updates the served model. |
+| Final held-out evaluation | Reserved holdout, after all choices are frozen | Evaluate the selected model at its OOF threshold and report sampling uncertainty. The fitted serving pipeline uses only training rows. |
+
+In [the training orchestration](../src/attrition/models/train.py), prepare_data creates the split and training-only exploration. compare_models, choose_operating_point, and training_diagnostics accept explicit training features and labels, rather than the Partitions object containing the holdout. evaluate_holdout runs after these stages; its results go to reporting and never return to selectors or tuners. Synthetic regression tests in [test_evaluation_boundaries.py](../tests/test_evaluation_boundaries.py) check this order, prohibit early holdout access, trace preprocessing fits, and check the exact outer-training rows supplied to tuning and threshold selection.
+
+The holdout is **not evaluated strictly once**. The holdout_at_0_5 JSON field, model_comparison.csv, the README/results tables, and the dashboard's comparison curves retain all five candidates for compatibility. Non-selected comparisons are **post-selection descriptive diagnostics**. The selected model is also scored at its frozen OOF threshold. Bootstrap intervals, subgroup and capacity summaries, and permutation importance reuse holdout labels; optional SHAP explains holdout predictions using a training background. These outputs must never select a model, feature set, hyperparameter, calibration method, or threshold.
+
+These checks enforce the current workflow's data flow, not a security sandbox against arbitrary Python code or deliberately mislabeled inputs. The published holdout has already been examined and is not a fresh independent benchmark for future iterations. Future model development must use training-only evaluation; confirming generalization after repeated development requires new independent data.
+
 ## Threshold selection
 
 The selected model generates training out-of-fold probabilities with the same five stratified folds. A grid from 0.05 through 0.95 includes all requested 0.20–0.50 operating points. The selected threshold maximizes **F2**, breaking ties by precision and then the higher threshold. [threshold_analysis.csv](../reports/metrics/threshold_analysis.csv) includes precision, recall, F1/F2, false positives, and false negatives for every point.
