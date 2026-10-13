@@ -22,14 +22,20 @@ from threadpoolctl import threadpool_limits
 
 from attrition.config import (
     CV_FOLDS,
+    DATA_ENV,
     DATA_PATH,
+    DATA_RELATIVE,
     DEFAULT_THRESHOLD,
     FEATURE_COLUMNS,
+    MODELS_DIR,
+    MODELS_ENV,
     RANDOM_STATE,
     REDUNDANT_COLUMNS,
     ROOT,
+    ROOT_ENV,
     SENSITIVE_COLUMNS,
     TARGET_MAPPING,
+    normalize_path,
 )
 from attrition.data.explore import save_exploration
 from attrition.data.load_data import load_data, split_data
@@ -232,8 +238,8 @@ class HoldoutResults:
     intervals: pd.DataFrame
 
 
-def create_run_paths(output_root: Path, run_id: str) -> RunPaths:
-    run = output_root / "models/runs" / run_id
+def create_run_paths(models_dir: Path, run_id: str) -> RunPaths:
+    run = models_dir / "runs" / run_id
     paths = RunPaths(run, run / "metrics", run / "figures", run / "processed")
     for directory in [paths.metrics, paths.figures, paths.processed]:
         directory.mkdir(parents=True, exist_ok=True)
@@ -450,10 +456,17 @@ def export_snapshot(paths: RunPaths, report: dict, result_text: str, example: di
             readme.write_text(updated, encoding="utf-8")
 
 
-def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: Path = ROOT) -> dict:
-    """Run the complete experiment and save a full preprocessing/model pipeline."""
+def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: Path = ROOT,
+          models_dir: Path | None = None) -> dict:
+    """Run the complete experiment and save a full preprocessing/model pipeline.
+
+    Bundles and the active pointer go to `models_dir`; without it, to the configured
+    MODELS_DIR for the default root, or to `output_root / "models"` for any other root.
+    """
+    if models_dir is None:
+        models_dir = MODELS_DIR if output_root.resolve() == ROOT else output_root / "models"
     run_id = str(uuid4())
-    paths = create_run_paths(output_root, run_id)
+    paths = create_run_paths(models_dir, run_id)
     LOGGER.info("Model training started")
     parts = prepare_data(data_path, paths)
     cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_STATE)
@@ -466,7 +479,7 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
     metadata = build_metadata(run_id, point, parts, data_path)
     report = build_report(metadata, summaries, point, holdout, diagnostics, engineering, shap_status)
     result_text, example = write_bundle(paths, pipelines[point.selected], metadata, report, parts)
-    publish_bundle(paths.run, output_root / "models/current.json")
+    publish_bundle(paths.run, models_dir / "current.json")
     LOGGER.info("Validated run %s is now active", run_id)
     export_snapshot(paths, report, result_text, example, output_root)
     metrics = holdout.selected_metrics
@@ -478,13 +491,20 @@ def train(data_path: Path = DATA_PATH, *, with_shap: bool = False, output_root: 
 def main() -> None:
     """Parse CLI options and run training with informative logs."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", type=Path, default=DATA_PATH)
+    parser.add_argument("--data", type=normalize_path, default=DATA_PATH,
+                        help=f"Raw CSV (default: ${DATA_ENV} or <root>/{DATA_RELATIVE.as_posix()})")
+    parser.add_argument("--output-root", type=normalize_path, default=ROOT,
+                        help=f"Directory for exported reports, examples, and README results (default: ${ROOT_ENV} "
+                             "or the checkout)")
+    parser.add_argument("--models-dir", type=normalize_path, default=None,
+                        help=f"Directory for run bundles and current.json (default: <output-root>/models, or "
+                             f"${MODELS_ENV} when --output-root is not given)")
     parser.add_argument("--with-shap", action="store_true", help="Generate optional SHAP explanations")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     # Small datasets are faster and more reproducible without thread oversubscription.
     with threadpool_limits(limits=1):
-        train(args.data, with_shap=args.with_shap)
+        train(args.data, with_shap=args.with_shap, output_root=args.output_root, models_dir=args.models_dir)
 
 
 if __name__ == "__main__":

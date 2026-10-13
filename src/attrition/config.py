@@ -1,13 +1,66 @@
 """Shared paths, schema, and reproducible experiment settings."""
 
+import os
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
-# src/attrition/config.py -> repository root. Run from a checkout (editable install or PYTHONPATH=src).
-ROOT = Path(__file__).resolve().parents[2]
-DATA_PATH = ROOT / "data/raw/WA_Fn-UseC_-HR-Employee-Attrition.csv"
-MODEL_PATH = ROOT / "models/attrition_pipeline.joblib"
-MODELS_DIR = ROOT / "models"
-CURRENT_RUN = MODELS_DIR / "current.json"
+ROOT_ENV, DATA_ENV, MODELS_ENV = "ATTRITION_ROOT", "ATTRITION_DATA_PATH", "ATTRITION_MODELS_DIR"
+DATA_RELATIVE = Path("data/raw/WA_Fn-UseC_-HR-Employee-Attrition.csv")
+_PACKAGE_DIR = Path(__file__).resolve().parent
+# src/attrition/config.py -> checkout root. An installed wheel has no checkout and uses the working directory.
+CHECKOUT_ROOT = _PACKAGE_DIR.parents[1] if _PACKAGE_DIR.parent.name == "src" else None
+
+
+def normalize_path(value: str) -> Path:
+    """An absolute path from operator input (environment or CLI); `~` expands, relative paths use the cwd.
+
+    Only normalizes: nothing is read or created here. Readers check existence, and
+    only training and pruning write.
+    """
+    value = value.strip()
+    if not value or "\0" in value:
+        raise ValueError("Path must be nonempty and must not contain NUL characters.")
+    return Path(value).expanduser().resolve()
+
+
+def env_path(name: str, environ: Mapping[str, str] = os.environ) -> Path | None:
+    """A normalized path from an environment variable; unset or blank means no override."""
+    value = environ.get(name, "")
+    if not value.strip():
+        return None
+    try:
+        return normalize_path(value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid {name}: {exc}") from exc
+
+
+@dataclass(frozen=True)
+class Paths:
+    """Data and artifact locations, set by trusted operators only, never by API requests."""
+
+    root: Path
+    data: Path
+    models: Path
+
+    @property
+    def current_run(self) -> Path:
+        return self.models / "current.json"
+
+    @classmethod
+    def from_env(cls, environ: Mapping[str, str] = os.environ) -> "Paths":
+        """Checkout defaults, overridden by ATTRITION_ROOT, ATTRITION_DATA_PATH, and ATTRITION_MODELS_DIR."""
+        root = env_path(ROOT_ENV, environ) or CHECKOUT_ROOT or Path.cwd().resolve()
+        return cls(root, env_path(DATA_ENV, environ) or root / DATA_RELATIVE,
+                   env_path(MODELS_ENV, environ) or root / "models")
+
+
+PATHS = Paths.from_env()
+ROOT = PATHS.root
+DATA_PATH = PATHS.data
+MODELS_DIR = PATHS.models
+MODEL_PATH = MODELS_DIR / "attrition_pipeline.joblib"
+CURRENT_RUN = PATHS.current_run
 METRICS_DIR = ROOT / "reports/metrics"
 FIGURES_DIR = ROOT / "reports/figures"
 RANDOM_STATE = 42
