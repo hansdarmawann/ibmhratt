@@ -23,3 +23,4 @@ data/processed/*
 coverage.xml
 reports/coverage.xml
 reports/test-results.xml
+"instructions.md" 
