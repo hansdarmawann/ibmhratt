@@ -14,7 +14,7 @@ An end-to-end Python portfolio project that estimates employee attrition probabi
 - **Diagnostics that do not move the goalposts.** Nested cross-validation of the whole selection procedure, calibration, seed stability, capacity and lift, sensitive-attribute and engineered-feature ablations, and subgroup metrics with intervals. None of them changes the served model.
 - **Reproducible artifacts.** Each training run produces a checksummed, versioned bundle behind an atomic active-run pointer, and CI checks that committed reports match a fresh run.
 - **Serving.** A FastAPI service (single and batch prediction, model info, request IDs, optional API key), a Streamlit dashboard with per-profile explanations, and PSI checks for input drift.
-- **Delivery.** CI on Ubuntu and Windows runs lint, type checks, tests with a coverage gate, notebooks, and live services; dependencies and the image are scanned, actions are pinned to commit SHAs, and the tested image is published to GHCR.
+- **Delivery.** CI on Ubuntu and Windows runs lint, type checks, tests with a coverage gate, notebooks, and live services; dependencies and the image are scanned, actions are pinned to commit SHAs, and owner-enabled, approved workflows publish the tested image to GHCR.
 
 ## Quickstart
 
@@ -111,6 +111,7 @@ flowchart TD
 | [Responsible AI](docs/responsible-ai.md) | Sensitive attributes, subgroup metrics and their uncertainty, conditions for any real use |
 | [Serving and operations](docs/serving.md) | API with example responses, dashboard, Docker, versioned bundles and pruning, drift checks |
 | [Development](docs/development.md) | Installation, tests and the local quality gate, CI/CD, supply-chain pinning |
+| [Releases](docs/releases.md) | Versioning, compatibility, changelog, publication gates, owner release steps and rollback |
 | [Contributing](CONTRIBUTING.md) | Setup, checks, pull request guidelines, ML evaluation rules, no-real-data policy |
 | [Security policy](SECURITY.md) | Private vulnerability reporting and known sensitive areas |
 

@@ -112,13 +112,10 @@ jobs:
         run: python -m pip_audit -r requirements-lock.txt --no-deps --disable-pip --progress-spinner off
 
   container:
-    name: Test container and deliver to GHCR
+    name: Test container
     needs: [validate, audit]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -152,15 +149,74 @@ jobs:
           aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
           image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress
           attrition-ci:local
+      - name: Save the tested image for approved publication
+        if: >-
+          github.event_name == 'push' && github.event.repository.fork == false &&
+          vars.ENABLE_GHCR_PUBLISH == 'true' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        run: docker save --output tested-image.tar attrition-ci:local
+      - name: Upload the tested image
+        if: >-
+          github.event_name == 'push' && github.event.repository.fork == false &&
+          vars.ENABLE_GHCR_PUBLISH == 'true' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tested-container-${{ github.run_attempt }}
+          path: tested-image.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    name: Publish approved image to GHCR
+    needs: [validate, audit, container]
+    if: >-
+      github.event_name == 'push' && github.event.repository.fork == false &&
+      vars.ENABLE_GHCR_PUBLISH == 'true' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ghcr-publication
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Verify reviewed ancestry and release version before registry access
+        env:
+          PUBLICATION_REF: ${{ github.ref }}
+        run: python -m scripts.check_release --ref "$PUBLICATION_REF"
+      - name: Download the tested image from this workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TESTED_IMAGE_ARTIFACT: tested-container-${{ github.run_attempt }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$TESTED_IMAGE_ARTIFACT"
+      - name: Load the tested image
+        run: docker load --input tested-image.tar
+      - name: Set image tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+            type=sha,format=long,prefix=sha-
       - name: Log in to GHCR
-        if: github.event_name == 'push' && github.event.repository.fork == false
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the tested image
-        if: github.event_name == 'push' && github.event.repository.fork == false
         shell: bash
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
