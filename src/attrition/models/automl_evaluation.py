@@ -70,15 +70,18 @@ class Choice:
     search_result: dict | None = None
 
 
-def automl_procedure(X: pd.DataFrame, y: pd.Series, *, n_trials: int, timeout: float | None, seed: int) -> Choice:
+def automl_procedure(X: pd.DataFrame, y: pd.Series, *, n_trials: int, timeout: float | None, seed: int,
+                     search=None) -> Choice:
     """The complete AutoML selection procedure, applied to (X, y) only.
 
     The search scores trials on seeded stratified inner folds and keeps the best
     mean AP. Only then do out-of-fold probabilities of that frozen configuration,
     on the same inner folds, choose the threshold, as in baseline training.
-    Finally the configuration is refitted on all of (X, y).
+    Finally the configuration is refitted on all of (X, y). `search` defaults to
+    the Optuna search; any replacement must return the same result shape.
     """
-    result = automl.search(X, y, n_trials=n_trials, timeout=timeout, seed=seed, folds=CV_FOLDS)
+    search = automl.search if search is None else search
+    result = search(X, y, n_trials=n_trials, timeout=timeout, seed=seed, folds=CV_FOLDS)
     best = result["best"]
     if best is None:
         raise NoSuccessfulSearch(result)
@@ -130,23 +133,23 @@ def nested_folds(X: pd.DataFrame, y: pd.Series, *, n_trials: int, timeout: float
     return rows
 
 
-def paired_differences(rows: list[dict]) -> dict:
-    """AutoML minus baseline on each outer fold, per metric; positive values favor AutoML."""
+def paired_differences(rows: list[dict], first: str = AUTOML, second: str = BASELINE) -> dict:
+    """First minus second procedure on each outer fold, per metric; positive values favor the first."""
     frame = pd.DataFrame(rows)
     result = {}
     for metric in NESTED_METRICS:
         table = frame.pivot(index="outer_fold", columns="procedure", values=metric).astype(float)
-        differences = table[AUTOML] - table[BASELINE]
+        differences = table[first] - table[second]
         result[metric] = {"mean": float(differences.mean()), "std": float(differences.std(ddof=0)),
                           "min": float(differences.min()), "max": float(differences.max()),
-                          "automl_higher_folds": int((differences > 0).sum()),
-                          "baseline_higher_folds": int((differences < 0).sum())}
+                          f"{first}_higher_folds": int((differences > 0).sum()),
+                          f"{second.removesuffix('_fixed')}_higher_folds": int((differences < 0).sum())}
     return result
 
 
-def selection_optimism(rows: list[dict]) -> dict:
+def selection_optimism(rows: list[dict], procedure: str = AUTOML) -> dict:
     """How far the best trial's inner CV AP overstated the AP the procedure achieved on outer folds."""
-    automl_rows = [row for row in rows if row["procedure"] == AUTOML]
+    automl_rows = [row for row in rows if row["procedure"] == procedure]
     inner = float(np.mean([row["inner_cv_ap"] for row in automl_rows]))
     outer = float(np.mean([row["pr_auc"] for row in automl_rows]))
     return {"mean_inner_best_trial_cv_ap": inner, "mean_outer_ap": outer, "difference": inner - outer}

@@ -24,6 +24,13 @@ prove that an image or GitHub Release has been published.
   inner folds, then chooses an out-of-fold F2 threshold. The served procedure is
   compared on the same folds. Development estimates only; the served model is
   unchanged.
+- An opt-in FLAML benchmark (`python -m attrition.models.flaml_benchmark`,
+  `make flaml-benchmark`, `requirements-flaml.txt`). FLAML's CFO search runs over
+  the Optuna search space. It is compared with the Optuna search and the served
+  procedure on the same training-only nested folds, with the same F2 threshold
+  step. FLAML is pinned in the lock file and installed for development and CI
+  tests, never for serving. Development estimates only; the served model is
+  unchanged.
 
 ### Changed
 

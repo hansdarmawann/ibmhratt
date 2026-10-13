@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-.PHONY: install train explain lint typecheck test coverage check api app notebooks prune automl automl-evaluate
+.PHONY: install train explain lint typecheck test coverage check api app notebooks prune automl automl-evaluate flaml-benchmark
 install:
 	$(PYTHON) -m pip install -r requirements-dev.txt -c requirements-lock.txt
 train:
@@ -36,3 +36,7 @@ automl:
 automl-evaluate:
 	$(PYTHON) -m pip install -r requirements-automl.txt -c requirements-lock.txt
 	$(PYTHON) -m attrition.models.automl_evaluation --n-trials 30 --timeout 900 --seed 42
+# Opt-in FLAML, Optuna, and baseline procedures on the same nested folds; about ten searches long.
+flaml-benchmark:
+	$(PYTHON) -m pip install -r requirements-flaml.txt -c requirements-lock.txt
+	$(PYTHON) -m attrition.models.flaml_benchmark --n-trials 30 --timeout 900 --seed 42

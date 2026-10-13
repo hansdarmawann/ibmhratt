@@ -135,6 +135,17 @@ The JSON records one row per procedure and outer fold: the chosen family and par
 
 Reading the result: these are training-only development estimates, not a new final test. The outer folds share most of their training rows, so the per-fold differences are not independent; no standard error, t-test, or p-value is reported because one computed from them would overstate certainty. On this small fictional dataset, a small mean difference, or most folds favoring one procedure, is not evidence that it generalizes better. The published holdout has already been examined and must not be used to choose between the procedures; confirming a difference would need new independent data. Nothing here changes the served model.
 
+## Optional FLAML benchmark
+
+`attrition.models.flaml_benchmark` compares FLAML's CFO search with the Optuna search and the served baseline procedure, using the nested protocol above. Each outer training fold runs both searches over the same search space and trial budget, the shared OOF F2 threshold step, and the baseline. All three are scored on the same outer validation rows. It is training-only, opt-in, and changes no model or report.
+
+```bash
+python -m pip install -r requirements-flaml.txt -c requirements-lock.txt   # included in requirements-dev.txt
+python -m attrition.models.flaml_benchmark --n-trials 30 --timeout 900 --seed 42 --output ~/attrition-automl/flaml-seed42.json
+```
+
+`make flaml-benchmark` runs the same commands without `--output`. FLAML is never part of the serving dependencies or image. See [FLAML benchmark](flaml-benchmark.md) for why it uses `flaml.tune` rather than `flaml.AutoML`, how the search spaces are kept identical, outputs, interpretation, and the measured installation cost.
+
 ## Testing and reproducibility
 
 ```bash
