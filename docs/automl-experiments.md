@@ -57,7 +57,7 @@ pipeline = automl.candidate_pipeline(X, best["model"], best["params"], result["s
 assert pipeline.named_steps["model"].get_params(deep=False) == best["estimator_params"]
 ```
 
-The estimator class string is descriptive metadata, not dynamically imported executable input. Reconstruction uses the existing fixed family constructors and shared preprocessing. No joblib/pickle is written or loaded, no final pipeline is fitted by search, and the API/dashboard gain no artifact-path interface. Reconstruction and promotion of a served model remain separate activities; promotion requires owner approval and PR 11.
+The estimator class string is descriptive metadata, not dynamically imported executable input. Reconstruction uses the existing fixed family constructors and shared preprocessing. No joblib/pickle is written or loaded, no final pipeline is fitted by search, and the API/dashboard gain no artifact-path interface. Reconstruction and promotion of a served model remain separate activities; [manual candidate promotion](automl-promotion.md) requires documented owner approval and serving smoke checks.
 
 ## Failures and comparison interpretation
 
