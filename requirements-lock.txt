@@ -27,6 +27,7 @@ debugpy==1.8.22
 executing==2.2.1
 fastapi==0.142.2
 fastjsonschema==2.22.2
+flaml==2.7.0
 fonttools==4.66.1
 h11==0.16.0
 httpcore==1.0.9

@@ -1,0 +1,4 @@
+-r requirements-automl.txt
+# Optional FLAML benchmark (python -m attrition.models.flaml_benchmark); never needed for serving.
+# The base package uses only NumPy: flaml[automl] (LightGBM/XGBoost) and flaml[blendsearch] are not used.
+flaml>=2.7,<3
