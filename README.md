@@ -110,7 +110,7 @@ flowchart TD
 | [Data and methodology](docs/methodology.md) | Business problem, dataset and exclusions, EDA, model comparison, threshold selection, explainability, training diagnostics, limitations |
 | [Responsible AI](docs/responsible-ai.md) | Sensitive attributes, subgroup metrics and their uncertainty, conditions for any real use |
 | [Serving and operations](docs/serving.md) | API with example responses, dashboard, Docker, versioned bundles and pruning, drift checks |
-| [Development](docs/development.md) | Installation, tests and the local quality gate, optional AutoML search, CI/CD, supply-chain pinning |
+| [Development](docs/development.md) | Installation, tests and the local quality gate, optional AutoML search and its nested evaluation, CI/CD, supply-chain pinning |
 | [Contributing](CONTRIBUTING.md) | Setup, checks, pull request guidelines, ML evaluation rules, no-real-data policy |
 | [Security policy](SECURITY.md) | Private vulnerability reporting and known sensitive areas |
 | [Releases](docs/releases.md) | Versioning, compatibility, changelog, publication gates, owner release steps and rollback |
@@ -128,7 +128,7 @@ ibmhratt/
 │   ├── config.py               # Paths, schema, seed, and shared settings
 │   ├── data/                   # Loading, validation, training-only EDA
 │   ├── features/               # Fold-fitted preprocessing; ablation-only engineered features
-│   ├── models/                 # Train, evaluate, threshold, nested CV, optional AutoML search, explain, predict, prune
+│   ├── models/                 # Train, evaluate, threshold, nested CV, optional AutoML search and its nested evaluation, explain, predict, prune
 │   ├── monitoring/             # PSI input drift checks
 │   └── visualization/          # Headless report figures
 ├── app/{api,streamlit_app}.py
@@ -137,12 +137,12 @@ ibmhratt/
 ├── reports/results.md
 ├── examples/employee.json      # Complete sample API payload
 ├── scripts/                    # Quality gate, report comparison, notebooks, delivery and container checks
-├── tests/                      # Data, leakage boundaries, nested CV, inference, API, drift, UI
+├── tests/                      # Data, leakage boundaries, nested CV, AutoML, inference, API, drift, UI
 ├── environment.yml
 ├── requirements.txt            # Training dependencies; includes requirements-serving.txt
 ├── requirements-dev.txt        # Runtime plus tests, coverage, lint, type checking, notebook execution
 ├── requirements-explain.txt    # Optional SHAP dependency
-├── requirements-automl.txt     # Optional Optuna dependency for the training-CV AutoML search
+├── requirements-automl.txt     # Optional Optuna dependency for the training-CV AutoML search and its evaluation
 ├── requirements-lock.txt       # Exact package constraints from verified Conda run
 ├── Dockerfile
 ├── pyproject.toml              # Package metadata plus Ruff, mypy, pytest, and coverage settings
