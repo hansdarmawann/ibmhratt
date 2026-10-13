@@ -1,6 +1,7 @@
 """FastAPI interface: uvicorn app.api:app --host 127.0.0.1 --port 8000.
 
 Set ATTRITION_API_KEY to require an X-API-Key header on the model endpoints.
+The key is a demo guard; public exposure needs the gateway controls in docs/serving.md.
 """
 
 import logging
@@ -8,17 +9,23 @@ import os
 import re
 import secrets
 import time
+from collections.abc import Callable, Coroutine
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
+from urllib.parse import quote
 from uuid import uuid4
 
 import pandas as pd
-from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, Security
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, create_model
 from sklearn.pipeline import Pipeline
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from attrition import __version__
 from attrition.config import CATEGORIES, CURRENT_RUN, DISCLAIMER, NUMERIC_BOUNDS
@@ -27,10 +34,44 @@ from attrition.models.predict import predict
 
 LOGGER = logging.getLogger(__name__)
 MAX_BATCH_SIZE = 1000
+# 8 KiB per record: a full batch of realistic records (about 0.7 KB each) fits with ample room.
+MAX_BODY_BYTES = MAX_BATCH_SIZE * 8 * 1024
+# Bounds the 422 response: one invalid batch can otherwise produce thousands of entries.
+MAX_REPORTED_ERRORS = 100
 REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,64}")
 HOLDOUT_KEYS = ("pr_auc", "roc_auc", "precision", "recall", "f1", "brier_score",
                 "threshold", "n", "positive_count")
-API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+API_KEY_NAME = "X-API-Key"
+API_KEY_HEADER = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+
+class BodySizeLimit:
+    """Reject a request body over max_bytes with HTTP 413, whether declared or streamed in chunks."""
+
+    def __init__(self, app: ASGIApp, max_bytes: int = MAX_BODY_BYTES) -> None:
+        self.app, self.max_bytes = app, max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        detail = f"Request body exceeds {self.max_bytes} bytes."
+        declared = Headers(scope=scope).get("content-length", "")
+        if declared.isdecimal() and int(declared) > self.max_bytes:
+            await JSONResponse(status_code=413, content={"detail": detail})(scope, receive, send)
+            return
+        received = 0
+
+        async def limited_receive() -> Message:
+            nonlocal received
+            message = await receive()
+            received += len(message.get("body", b""))
+            if received > self.max_bytes:
+                # FastAPI re-raises HTTPException from body reading, so this becomes a 413 response.
+                raise HTTPException(status_code=413, detail=detail)
+            return message
+
+        await self.app(scope, limited_receive, send)
 
 
 def employee_schema() -> type[BaseModel]:
@@ -110,10 +151,12 @@ def loaded_pipeline(request: Request) -> Pipeline:
     return pipeline
 
 
-def create_app(model_path: str | Path = CURRENT_RUN, *, api_key: str | None = None) -> FastAPI:
+def create_app(model_path: str | Path = CURRENT_RUN, *, api_key: str | None = None,
+               max_body_bytes: int = MAX_BODY_BYTES) -> FastAPI:
     """Build an app with a once-per-process loaded, injectable model artifact.
 
     With an api_key, model endpoints require a matching X-API-Key header; / and /health stay open.
+    Request bodies over max_body_bytes are rejected with HTTP 413.
     """
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -131,10 +174,31 @@ def create_app(model_path: str | Path = CURRENT_RUN, *, api_key: str | None = No
         if api_key and not (supplied and secrets.compare_digest(supplied.encode(), api_key.encode())):
             raise HTTPException(status_code=401, detail="Missing or invalid API key.")
 
+    class KeyCheckedRoute(APIRoute):
+        """Routes that depend on require_api_key check it before FastAPI reads or parses the body.
+
+        Unauthenticated callers cannot make the service parse JSON or learn validation details.
+        The dependency still runs afterwards and declares the scheme in OpenAPI.
+        """
+
+        def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+            handler = super().get_route_handler()
+            if not any(dependency.dependency is require_api_key for dependency in self.dependencies):
+                return handler
+
+            async def checked(request: Request) -> Response:
+                await require_api_key(request.headers.get(API_KEY_NAME))
+                return await handler(request)
+
+            return checked
+
     protected = [Depends(require_api_key)]
     application = FastAPI(title="Employee Attrition Analysis", version=__version__,
                           description=DISCLAIMER, lifespan=lifespan)
+    application.router.route_class = KeyCheckedRoute
     application.state.pipeline = None
+    # Added before request_context, so it runs inside it: rejected requests still get IDs and logs.
+    application.add_middleware(BodySizeLimit, max_bytes=max_body_bytes)
 
     @application.middleware("http")
     async def request_context(request: Request, call_next):
@@ -144,9 +208,21 @@ def create_app(model_path: str | Path = CURRENT_RUN, *, api_key: str | None = No
         started = time.perf_counter()
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Predictions describe individual profiles; shared caches and browsers must not keep them.
+        response.headers["Cache-Control"] = "no-store"
+        # Percent-encode the decoded path, as uvicorn's access log does, so it cannot forge log fields.
         LOGGER.info("request_id=%s method=%s path=%s status=%d duration_ms=%.1f", request_id,
-                    request.method, request.url.path, response.status_code, (time.perf_counter() - started) * 1000)
+                    request.method, quote(request.scope["path"]), response.status_code,
+                    (time.perf_counter() - started) * 1000)
         return response
+
+    @application.exception_handler(RequestValidationError)
+    async def validation_failed(request: Request, exc: RequestValidationError) -> JSONResponse:
+        """Report where and why validation failed without echoing submitted values back."""
+        errors = [{"type": error["type"], "loc": list(error["loc"]), "msg": error["msg"]}
+                  for error in exc.errors()[:MAX_REPORTED_ERRORS]]
+        return JSONResponse(status_code=422, content={"detail": errors})
 
     @application.get("/")
     def root() -> dict:

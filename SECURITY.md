@@ -2,7 +2,7 @@
 
 ## Scope and support
 
-This is an educational demonstration, not a production service. Only the latest commit on `main` is maintained. The API's optional shared key is a basic demo guard, not production authentication; see [Serving and operations](docs/serving.md#api-usage) for deployment limits.
+This is an educational demonstration, not a production service. Only the latest commit on `main` is maintained. The API's optional shared key is a basic demo guard, not production authentication; see [Deployment boundaries](docs/serving.md#deployment-boundaries) for what any exposure beyond local use requires.
 
 ## Reporting a vulnerability
 
@@ -20,7 +20,7 @@ Reports are handled on a best-effort basis; no response time or bounty is promis
 ## Known sensitive areas
 
 - **Model artifacts** are loaded with joblib (pickle). Loading an untrusted file can execute arbitrary code. Only load artifacts you produced or can verify; checksums detect corruption, not malice.
-- **API exposure.** For anything beyond local use, put the service behind proper authentication, TLS, and rate and body-size limits.
+- **API exposure.** For anything beyond local use, put the service behind gateway authentication, TLS, rate and body-size limits, and monitoring, and provision only trusted artifacts. The [deployment boundaries](docs/serving.md#deployment-boundaries) separate what the service enforces from what the deployment must add.
 - **Data.** Never submit real employee data to this project or its issue tracker.
 
 ## Dependencies

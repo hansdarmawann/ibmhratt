@@ -26,13 +26,13 @@ Responses contain `prediction` (Yes/No), `attrition_probability`, `threshold`, a
 
 `POST /predict/batch` accepts `{"employees": [...]}` with 1 to 1,000 employee objects using the same per-record schema, and returns `count` plus `predictions` in request order. `GET /model` reports the API version, run ID, selected model, decision threshold, feature count, training rows, dataset hash, pinned package versions, and the frozen holdout metrics of the loaded bundle (null metrics for an explicit legacy file).
 
-Every response carries an `X-Request-ID` header: a safe caller-supplied value (letters, digits, `.`, `_`, `-`, at most 64 characters) is echoed, otherwise one is generated. The `app.api` logger records request ID, method, path, status, and duration only, never request bodies. Set `ATTRITION_API_KEY` before starting the server to require a matching `X-API-Key` header on `/model`, `/predict`, and `/predict/batch`; `/` and `/health` stay open for probes. The Python module accepts a dictionary or DataFrame and returns `predicted_class`, `attrition_probability`, `decision_threshold`, and nullable `run_id`; a DataFrame yields a list in row order.
+Every response carries an `X-Request-ID` header: a safe caller-supplied value (letters, digits, `.`, `_`, `-`, at most 64 characters) is echoed, otherwise one is generated. Responses also send `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`. The `app.api` logger records request ID, method, percent-encoded path, status, and duration only, never request bodies or headers. Set `ATTRITION_API_KEY` before starting the server to require a matching `X-API-Key` header on `/model`, `/predict`, and `/predict/batch`; `/`, `/health`, and the OpenAPI docs stay open. The key is checked before the request body is read, so a request without it gets HTTP 401 whatever its payload. Bodies over 8,192,000 bytes get HTTP 413. The key is a demo guard only; see [Deployment boundaries](#deployment-boundaries). The Python module accepts a dictionary or DataFrame and returns `predicted_class`, `attrition_probability`, `decision_threshold`, and nullable `run_id`; a DataFrame yields a list in row order.
 
 ```bash
 python -m attrition.models.predict examples/employee.json
 ```
 
-The model loads once during API startup; restart after retraining. Requests log event/count information without raw profiles. Joblib artifacts must come from a trusted source because pickle-based loading can execute code. The optional shared API key is a basic demo guard, not production identity, authorization, rate limiting, or TLS; deploy behind proper access controls.
+The model loads once during API startup; restart after retraining. Requests log event/count information without raw profiles. Joblib artifacts must come from a trusted source because pickle-based loading can execute code. The optional shared API key is a basic demo guard, not production identity, authorization, rate limiting, or TLS; [Deployment boundaries](#deployment-boundaries) lists what any wider exposure requires.
 
 ### Example responses
 
@@ -82,8 +82,31 @@ Single and batch probabilities can differ in the last floating-point digits beca
 `POST /predict` with only `{"Age": 30}` returns HTTP 422 with one entry per missing field (29 here), for example:
 
 ```json
-{"type": "missing", "loc": ["body", "DailyRate"], "msg": "Field required", "input": {"Age": 30}}
+{"type": "missing", "loc": ["body", "DailyRate"], "msg": "Field required"}
 ```
+
+Validation errors give the type, location, and message of each problem but never echo submitted values. At most 100 entries are listed, so one invalid batch cannot produce an oversized response.
+
+## Deployment boundaries
+
+The API is built for local demonstration on a loopback address: `--host 127.0.0.1`, or `docker run -p 127.0.0.1:8000:8000`. Any wider exposure (a LAN, a cloud VM, or a public URL) requires the controls below. They live outside this repository, and the optional API key replaces none of them.
+
+| Control | Required before wider exposure | What the service itself does |
+|---|---|---|
+| Authentication and authorization | An identity-aware gateway or reverse proxy (for example OIDC, mutual TLS, or a managed API gateway) with per-client credentials, revocation, and audit logs | Optional single shared `X-API-Key`. There are no users, roles, expiry, or lockout, and rotating the key needs a restart. |
+| TLS | Terminate HTTPS at the gateway; never send the key over plain HTTP | Plain HTTP only |
+| Rate and concurrency limits | Per-client limits at the gateway | None |
+| Body limits | A gateway limit at or below the service's own | HTTP 413 above 8,192,000 bytes, whether declared or streamed in chunks; HTTP 422 above 1,000 batch records |
+| Trusted artifact provisioning | Build images from reviewed commits; mount external bundles read-only from storage that only trusted operators can write | Loads only the operator-configured path and verifies checksums, schema, and metadata at startup. Checksums do not make an untrusted pickle safe. |
+| Monitoring | Collect logs; alert on 401, 413, 422, and 5xx rates, latency, `/health` failures, and [input drift](#input-drift-monitoring) | Request ID, method, encoded path, status, and duration per request; generic 500 and 503 bodies, with details in server logs only |
+
+The service also rejects unknown fields, labels, and identifiers in every record, and returns no stack traces or artifact paths to callers. Requests from callers without the key are rejected before their body is parsed. Uvicorn's own access log includes query strings, so never put secrets in URLs.
+
+**API key handling.** Generate a long random key, for example `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Supply it at runtime (`docker run -e ATTRITION_API_KEY`, or a secret manager), never in the image, a build argument, a committed file, or a URL. It is one static secret shared by every client: anyone who holds it has full access, and nothing limits guessing. API-key authentication alone is not production security.
+
+**Container.** The image runs as the unprivileged `appuser`, and CI's container smoke test asserts a non-root UID and serving-only contents. The API only reads model files. To serve bundles from outside the image, mount them read-only and point `ATTRITION_MODELS_DIR` at the mount, for example `-v "$PWD/models:/models:ro" -e ATTRITION_MODELS_DIR=/models`. The files must be readable by the container user; `docker run --rm --entrypoint id employee-attrition-ml` prints its UID. CI does not exercise external mounts. Further restrictions such as `--read-only`, `--cap-drop ALL`, and `--security-opt no-new-privileges` are reasonable defaults but are also untested here, so verify them in your environment before relying on them.
+
+Whatever the deployment, predictions remain educational signals and must not drive decisions about individual employees; see [Responsible AI](responsible-ai.md).
 
 ## Streamlit usage
 
