@@ -68,6 +68,37 @@ Packaging limits:
 
 `tests/test_paths.py` covers the overrides, and `tests/test_packaging.py` builds the wheel from a minimal source copy, installs it into a separate directory, and runs prediction from outside the checkout.
 
+## Optional AutoML search (Optuna)
+
+An opt-in Optuna search proposes a candidate model family and hyperparameters. It is a development tool: it does not train, select, or serve a model, and `python -m attrition.models.train` is unchanged. Nothing runs it implicitly, and neither training nor the apps import it.
+
+```bash
+python -m pip install -r requirements-automl.txt -c requirements-lock.txt   # included in requirements-dev.txt
+python -m attrition.models.automl --n-trials 30 --timeout 900 --seed 42 --output ~/attrition-automl/search-seed42.json
+```
+
+`make automl` runs the same two commands without `--output`. About 30 trials and 900 seconds is a reasonable manual budget; CI runs only the 1–2 trial tests in `tests/test_automl.py`.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--n-trials` | 30 | Trial budget |
+| `--timeout` | 900 | Seconds after which no new trial starts |
+| `--seed` | 42 | Seeds the TPE sampler, the CV folds, and every estimator |
+| `--folds` | 5 | Stratified training CV folds (2–10) |
+| `--data` | `ATTRITION_DATA_PATH` or the checkout CSV | Raw CSV, validated like training |
+| `--output` | none | Also write the JSON to this **new** file; existing files and anything inside the models directory are refused |
+
+How the search works:
+
+- The CSV is validated and split exactly like training. Only the training partition reaches the search; the holdout rows, labels, and scores are never used.
+- Each trial samples a family (logistic regression, random forest, or histogram gradient boosting), then only that family's parameters in ranges sized for about 1,000 rows. Logistic regression keeps the L2/lbfgs default, so no invalid solver/penalty combination can be sampled on any supported scikit-learn version.
+- Every trial wraps the estimator in the same preprocessing pipeline as training, and seeded stratified CV refits the whole pipeline inside each training fold. The objective is mean average precision (AP). A prior-based dummy classifier is scored on the same folds as an untuned reference.
+- Trials run serially (`n_jobs=1`) with single-threaded math. With a fixed `--n-trials` that finishes before the timeout, the same seed and data reproduce the same result. If the timeout stops the search early, the number of completed trials depends on machine speed.
+
+The JSON on stdout records the objective, fold and sampler seeds, budget, completed trials, the best trial's family, parameters, and per-fold CV AP, the dummy reference, training row counts, package versions, and the data SHA-256. Its `holdout_used` and `served_model_changed` fields are always `false`.
+
+Limits: the best trial's CV AP is optimistic, because the same folds chose it. It is a development estimate for a candidate configuration, not a final performance estimate and not comparable to the holdout table. The search does not fit a final model, choose a decision threshold, write a bundle, or change `models/current.json`. An unbiased estimate of the whole search procedure needs nested CV. Promoting a candidate would need a separate, reviewed change.
+
 ## Testing and reproducibility
 
 ```bash

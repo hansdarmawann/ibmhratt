@@ -1,5 +1,6 @@
-# Training plus optional-explainer tests, coverage, linting, and notebooks.
+# Training plus optional-explainer and AutoML tests, coverage, linting, and notebooks.
 -r requirements-explain.txt
+-r requirements-automl.txt
 # The project itself, so `python -m attrition...` works from any directory.
 -e .
 pytest>=8.3,<10
