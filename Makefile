@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-.PHONY: install train explain lint typecheck test coverage check api app notebooks prune
+.PHONY: install train explain lint typecheck test coverage check api app notebooks prune automl
 install:
 	$(PYTHON) -m pip install -r requirements-dev.txt -c requirements-lock.txt
 train:
@@ -26,3 +26,7 @@ notebooks:
 	$(PYTHON) -m scripts.execute_notebooks
 prune:
 	$(PYTHON) -m attrition.models.prune --keep 5
+# Opt-in manual search; never part of train, test, or check.
+automl:
+	$(PYTHON) -m pip install -r requirements-automl.txt -c requirements-lock.txt
+	$(PYTHON) -m attrition.models.automl --n-trials 30 --timeout 900 --seed 42

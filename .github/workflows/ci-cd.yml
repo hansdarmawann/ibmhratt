@@ -46,6 +46,7 @@ jobs:
             requirements-serving.txt
             requirements-dev.txt
             requirements-explain.txt
+            requirements-automl.txt
             requirements-lock.txt
       - name: Install constrained dependencies
         run: python -m pip install -r requirements-dev.txt -r requirements-explain.txt -c requirements-lock.txt
