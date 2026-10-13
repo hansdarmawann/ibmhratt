@@ -149,6 +149,11 @@ def test_nested_evaluation_is_deterministic_and_reports_a_paired_comparison(optu
     X, _, y, _ = split_data(synthetic_data)
     first, second = (automl_evaluation.nested_evaluation(X, y, n_trials=TRIALS, timeout=120, seed=SEED,
                                                          outer_folds=OUTER) for _ in range(2))
+    for result in (first, second):
+        for search in result["searches"]:
+            search["result"].pop("elapsed_seconds")
+            for trial in search["result"]["trial_records"]:
+                trial.pop("elapsed_seconds")
     assert first == second
     json.dumps(first, allow_nan=False)
     assert first["outer_cv"] == {"partition": "training", "folds": OUTER, "stratified": True, "shuffle": True,
@@ -160,6 +165,13 @@ def test_nested_evaluation_is_deterministic_and_reports_a_paired_comparison(optu
     assert first["train_rows"] == len(X) and first["train_positives"] == int(y.sum())
     assert set(first["procedures"]) == {"automl", "baseline_fixed"}
     assert len(first["folds"]) == 2 * OUTER
+    assert len(first["searches"]) == OUTER
+    for fold, search in enumerate(first["searches"]):
+        assert search["outer_fold"] == fold
+        trial = search["result"]["trial_records"][0]
+        row = first["folds"][2 * fold]
+        assert trial["state"] == "COMPLETE" and trial["model"] == row["selected_model"]
+        assert automl.readable(trial["sampled_params"]) == row["parameters"]
     for row in first["folds"]:
         assert 0 < row["threshold"] < 1
         if row["procedure"] == "automl":
