@@ -123,6 +123,8 @@ Training writes a new `models/runs/<UUID>/` directory containing `pipeline.jobli
 
 API startup resolves and loads one run for its process lifetime; restart it after retraining. Each dashboard rerun resolves one active run, and caches that immutable bundle by its UUID. It never combines a model from one run with reports from another. Checksums detect accidental corruption and mixing; they do not make untrusted joblib/pickle safe.
 
+To keep bundles outside the checkout, set `ATTRITION_MODELS_DIR` (or `ATTRITION_ROOT`) for training, the API, the dashboard, and the prune/drift commands alike. Only operators set these variables; requests cannot. See [Paths and wheel installs](development.md#paths-and-wheel-installs).
+
 Each training run adds a bundle. `python -m attrition.models.prune --keep 5` removes all but the five most recently written runs and never removes the active run; add `--dry-run` to list what would be removed. Only UUID-named run folders are considered, and an unverifiable `current.json` stops pruning without deleting anything. A running API keeps serving the bundle it loaded at startup.
 
 The existing `reports/`, `data/processed/`, and `examples/` paths remain reproducible exports. Git reports omit runtime UUIDs. Schema-1 files can still be loaded explicitly with `python -m attrition.models.predict examples/employee.json --model <file>.joblib`. Pickles record module paths, so artifacts trained before the package moved from `src` to `attrition` fail with a clear "retrain" error; run `python -m attrition.models.train` to replace them.
