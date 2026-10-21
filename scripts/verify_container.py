@@ -46,9 +46,11 @@ def verify(image: str) -> None:
         assert result["prediction"] == expected
         assert result["run_id"] == health["run_id"]
         checks = (
-            "import os; from pathlib import Path; from attrition.models.artifacts import load_bundle; "
+            "import os; from importlib.util import find_spec; from pathlib import Path; "
+            "from attrition.models.artifacts import load_bundle; "
             "assert os.getuid() != 0; assert not Path('/app/data/raw').exists(); "
             "assert not Path('/app/src/attrition/models/train.py').exists(); "
+            "assert find_spec('pip') is None; "
             "assert load_bundle().run_id"
         )
         docker("exec", name, "python", "-c", checks)

@@ -162,8 +162,10 @@ jobs:
       - name: Scan the image for fixable high and critical vulnerabilities
         run: >-
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          -v "$PWD/.trivyignore.yaml:/tmp/trivyignore.yaml:ro"
           aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
           image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress
+          --ignorefile /tmp/trivyignore.yaml
           attrition-ci:local
       - name: Save the tested image for approved publication
         if: >-
