@@ -1,6 +1,6 @@
 # API/dashboard dependencies; training plots and SHAP are optional at runtime.
 pandas>=2.2,<4
-numpy>=2.5.4,<3
+numpy>=2.0,<3
 scikit-learn>=1.6,<1.9
 joblib>=1.4,<2
 threadpoolctl>=3.2,<4
