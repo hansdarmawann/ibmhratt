@@ -24,7 +24,7 @@ contourpy==1.4.0
 coverage==7.16.2
 cycler==0.12.1
 debugpy==1.8.22
-executing==2.2.1
+executing==2.3.0
 fastapi==0.142.2
 fastjsonschema==2.22.2
 flaml==2.7.0
