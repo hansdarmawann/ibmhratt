@@ -139,7 +139,7 @@ Five prespecified formulas added to the logistic model improved training CV AP b
 
 ## Reproducibility
 
-Recorded environment in the metadata: Python 3.12.15, NumPy 2.5.3, pandas 3.0.6, scikit-learn 1.8.0, joblib 1.6.0, seed 42. Reproduce with the pinned constraints:
+Recorded environment in the metadata: Python 3.12.15, NumPy 2.5.4, pandas 3.0.6, scikit-learn 1.8.0, joblib 1.6.0, seed 42. Reproduce with the pinned constraints:
 
 ```bash
 python -m pip install -r requirements-dev.txt -c requirements-lock.txt
