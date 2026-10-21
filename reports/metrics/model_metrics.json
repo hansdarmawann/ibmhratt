@@ -41,7 +41,7 @@
   "random_state": 42,
   "python_version": "3.12.15",
   "package_versions": {
-    "numpy": "2.5.3",
+    "numpy": "2.5.4",
     "pandas": "3.0.6",
     "scikit-learn": "1.8.0",
     "joblib": "1.6.0"

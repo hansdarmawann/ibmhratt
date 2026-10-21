@@ -23,7 +23,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app/src
 WORKDIR /app
 COPY requirements-serving.txt requirements-lock.txt ./
-RUN pip install --no-cache-dir -r requirements-serving.txt -c requirements-lock.txt
+# pip vendors its own dependencies, independently of our constraints. It is only needed to build the image.
+RUN pip install --no-cache-dir -r requirements-serving.txt -c requirements-lock.txt \
+    && python -m pip check \
+    && python -m pip uninstall --yes pip
 COPY src/attrition/__init__.py src/attrition/config.py ./src/attrition/
 COPY src/attrition/data/__init__.py src/attrition/data/validate_data.py ./src/attrition/data/
 COPY src/attrition/features ./src/attrition/features
