@@ -1,2 +1,2 @@
 -r requirements.txt
-shap>=0.53.0,<0.54
+shap>=0.54.1,<0.55
