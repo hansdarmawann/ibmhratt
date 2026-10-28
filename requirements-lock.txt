@@ -5,7 +5,7 @@ MarkupSafe==3.0.4
 PyYAML==6.0.3
 Pygments==2.21.0
 SQLAlchemy==2.1.5
-alembic==1.20.0
+alembic==1.20.1
 altair==6.3.0
 annotated-doc==0.0.5
 annotated-types==0.8.0
