@@ -65,7 +65,7 @@ pandas==3.0.6
 parso==0.8.7
 pathspec==1.1.1
 pillow==13.0.0
-platformdirs==4.12.3
+platformdirs==4.13.5
 pluggy==1.6.0
 prompt_toolkit==3.0.53
 protobuf==7.36.2
